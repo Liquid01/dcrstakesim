@@ -110,7 +110,7 @@ func (s *simulator) calcNextStakeDiffProposal1E() int64 {
 	*/
 
 	newDiff := float64(prevDiff) * lastRatio
-        factor := 2.0 // increase the action
+        factor := 4.0 // increase the action
 
         if lastRatio < 1.0 {
             newDiff = float64(prevDiff) * (1.0 - (((1.0 - lastRatio) * factor) * (1/targetRatio)))
