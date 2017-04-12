@@ -90,17 +90,35 @@ func (s *simulator) calcNextStakeDiffProposal1E() int64 {
 		return curDiff
 	}
 
-	ticketsPerBlock := int64(s.params.TicketsPerBlock)
-	targetPoolSize := ticketsPerBlock * int64(s.params.TicketPoolSize)
+	// derive ratio of percent change in pool size
 	curPoolSize := int64(s.tip.poolSize)
 	lastRatio := float64(curPoolSize) / float64(prevPoolSize)
+
+	// derive ratio of percent of target pool size
+	ticketsPerBlock := int64(s.params.TicketsPerBlock)
+	targetPoolSize := ticketsPerBlock * int64(s.params.TicketPoolSize)
 	targetRatio := float64(curPoolSize) / float64(targetPoolSize)
-	foo := int64(float64(prevDiff) * lastRatio)
-	foo = int64(float64(foo) * targetRatio)
-	if foo < s.params.MinimumStakeDiff {
-		return s.params.MinimumStakeDiff
+
+	// derive ratio of purchase slots filled
+	/*
+	        maxFreshStakePerBlock := int64(s.params.MaxFreshStakePerBlock)
+		//blocksPerWindow := int64(s.params.BlocksPerWindow)
+		blocksPerWindow := int64(144)
+	        maxFreshStakePerWindow := maxFreshStakePerBlock * blocksPerWindow
+	        freshStakeLastWindow := curPoolSize - prevPoolSize
+	        freshStakeRatio := freshStakeLastWindow / maxFreshStakePerWindow
+	*/
+
+	if targetRatio > 1.0 {
+		return int64(float64(prevDiff) * targetRatio)
 	}
-	return foo
+	if lastRatio < 1.0 {
+		return int64(float64(prevDiff) * targetRatio)
+	}
+	return int64(float64(prevDiff) * lastRatio)
+	//if newDiff < s.params.MinimumStakeDiff {
+	//	return s.params.MinimumStakeDiff
+	//}
 }
 
 // calcNextStakeDiffProposal2 returns the required stake difficulty (aka ticket
