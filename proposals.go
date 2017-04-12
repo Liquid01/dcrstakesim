@@ -53,6 +53,56 @@ func (s *simulator) calcNextStakeDiffProposal1() int64 {
 	return int64(float64(prevDiff) * ratio)
 }
 
+// the algorithm proposed by raedah (enhanced)
+func (s *simulator) calcNextStakeDiffProposal1E() int64 {
+	// Stake difficulty before any tickets could possibly be purchased is
+	// the minimum value.
+	nextHeight := int32(0)
+	if s.tip != nil {
+		nextHeight = s.tip.height + 1
+	}
+	stakeDiffStartHeight := int32(s.params.CoinbaseMaturity) + 1
+	if nextHeight < stakeDiffStartHeight {
+		return s.params.MinimumStakeDiff
+	}
+
+	// Return the previous block's difficulty requirements if the next block
+	// is not at a difficulty retarget interval.
+	intervalSize := s.params.StakeDiffWindowSize
+	curDiff := s.tip.ticketPrice
+	if int64(nextHeight)%intervalSize != 0 {
+		return curDiff
+	}
+
+	// Attempt to get the ticket price and pool size from the previous
+	// retarget interval.
+	prevRetargetHeight := nextHeight - int32(intervalSize)
+	prevPoolSize := int64(s.tip.poolSize)
+	prevDiff := s.tip.ticketPrice
+	node := s.ancestorNode(s.tip, prevRetargetHeight, nil)
+	if node != nil {
+		prevPoolSize = int64(node.poolSize)
+		prevDiff = node.ticketPrice
+	}
+
+	// Return the existing ticket price for the first interval.
+	if prevPoolSize == 0 {
+		return curDiff
+	}
+
+	ticketsPerBlock := int64(s.params.TicketsPerBlock)
+	targetPoolSize := ticketsPerBlock * int64(s.params.TicketPoolSize)
+	curPoolSize := int64(s.tip.poolSize)
+	lastRatio := float64(curPoolSize) / float64(prevPoolSize)
+	targetRatio := float64(curPoolSize) / float64(targetPoolSize)
+	foo := int64(float64(prevDiff) * lastRatio)
+	foo = int64(float64(foo) * targetRatio)
+	if foo < s.params.MinimumStakeDiff {
+		return s.params.MinimumStakeDiff
+	}
+	return foo
+}
+
 // calcNextStakeDiffProposal2 returns the required stake difficulty (aka ticket
 // price) for the block after the current tip block the simulator is associated
 // with using the algorithm proposed by animedow in

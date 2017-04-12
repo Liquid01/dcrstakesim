@@ -347,8 +347,9 @@ func main() {
 	// difficulty (aka ticket price) here.
 	// *********************************************************************
 	sim := newSimulator(&chaincfg.MainNetParams)
-	sim.nextTicketPriceFunc = sim.curCalcNextStakeDiff
+	//sim.nextTicketPriceFunc = sim.curCalcNextStakeDiff
 	//sim.nextTicketPriceFunc = sim.calcNextStakeDiffProposal1
+	sim.nextTicketPriceFunc = sim.calcNextStakeDiffProposal1E
 	//sim.nextTicketPriceFunc = sim.calcNextStakeDiffProposal2
 	//sim.nextTicketPriceFunc = sim.calcNextStakeDiffProposal3
 
