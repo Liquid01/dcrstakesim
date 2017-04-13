@@ -6,7 +6,7 @@ package main
 
 import (
 	"github.com/davecgh/dcrstakesim/internal/tickettreap"
-        //"fmt"
+	//"fmt"
 )
 
 // calcNextStakeDiffProposal1 returns the required stake difficulty (aka ticket
@@ -86,42 +86,52 @@ func (s *simulator) calcNextStakeDiffProposal1E() int64 {
 		return curDiff
 	}
 
-        //ticketMaturity := int64(s.params.TicketMaturity)
+	ticketMaturity := int64(s.params.TicketMaturity)
 
-        /*
-	// get the immature tickets that will mature in the next window
-        // note, make sure we have no off-by-ones here
-        // 256 - 144 = 112 on mainnet
-        var maturingTickets int64
-        var relevantHeight int32
-        if ticketMaturity >= intervalSize {
-            relevantHeight = s.tip.height
-        } else {
-            relevantHeight = s.tip.height - int32(ticketMaturity - intervalSize)
-        }
-        relevantNode := s.ancestorNode(s.tip, relevantHeight, nil)
-        s.ancestorNode(relevantNode, relevantHeight - int32(intervalSize), func(n *blockNode) {
-            maturingTickets += int64(len(n.ticketsAdded))
-            //fmt.Println(n.height, n.ticketsAdded)
-        })
+	/*
+		// get the immature tickets that will mature in the next window
+	        // note, make sure we have no off-by-ones here
+	        // 256 - 144 = 112 on mainnet
+	        var maturingTickets int64
+	        var relevantHeight int32
+	        if ticketMaturity >= intervalSize {
+	            relevantHeight = s.tip.height
+	        } else {
+	            relevantHeight = s.tip.height - int32(ticketMaturity - intervalSize)
+	        }
+	        relevantNode := s.ancestorNode(s.tip, relevantHeight, nil)
+	        s.ancestorNode(relevantNode, relevantHeight - int32(intervalSize), func(n *blockNode) {
+	            maturingTickets += int64(len(n.ticketsAdded))
+	            //fmt.Println(n.height, n.ticketsAdded)
+	        })
 
-	// get the immature tickets that will mature in the _previous_ window
-        // note, make sure we have no off-by-ones here
-        var prevMaturingTickets int64
-        if ticketMaturity >= intervalSize {
-	    relevantHeight = s.tip.height - int32(intervalSize)
-        } else {
-            relevantHeight = s.tip.height - int32(intervalSize) - int32(ticketMaturity - intervalSize)
-        }
-        relevantNode = s.ancestorNode(s.tip, relevantHeight, nil)
-        s.ancestorNode(relevantNode, relevantHeight - int32(intervalSize), func(n *blockNode) {
-            prevMaturingTickets += int64(len(n.ticketsAdded))
-            //fmt.Println(n.height, n.ticketsAdded)
-        })
-        */
+		// get the immature tickets that will mature in the _previous_ window
+	        // note, make sure we have no off-by-ones here
+	        var prevMaturingTickets int64
+	        if ticketMaturity >= intervalSize {
+		    relevantHeight = s.tip.height - int32(intervalSize)
+	        } else {
+	            relevantHeight = s.tip.height - int32(intervalSize) - int32(ticketMaturity - intervalSize)
+	        }
+	        relevantNode = s.ancestorNode(s.tip, relevantHeight, nil)
+	        s.ancestorNode(relevantNode, relevantHeight - int32(intervalSize), func(n *blockNode) {
+	            prevMaturingTickets += int64(len(n.ticketsAdded))
+	            //fmt.Println(n.height, n.ticketsAdded)
+	        })
+	*/
 
-        //immatureTickets := int64(len(s.immatureTickets) * int(intervalSize / ticketMaturity))
-        immatureTickets := int64(len(s.immatureTickets))
+	// get the immature ticket count from the previous window
+	// note, make sure we have no off-by-ones here
+	var prevImmatureTickets int64
+	relevantHeight := s.tip.height - int32(intervalSize) // or nextHeight?
+	relevantNode := s.ancestorNode(s.tip, relevantHeight, nil)
+	s.ancestorNode(relevantNode, relevantHeight-int32(ticketMaturity), func(n *blockNode) {
+		prevImmatureTickets += int64(len(n.ticketsAdded))
+		//fmt.Println(n.height, n.ticketsAdded)
+	})
+
+	//immatureTickets := int64(len(s.immatureTickets) * int(intervalSize / ticketMaturity))
+	immatureTickets := int64(len(s.immatureTickets))
 
 	// derive ratio of percent change in pool size
 	// max possible poolSizeChangeRatio is 2
@@ -129,16 +139,14 @@ func (s *simulator) calcNextStakeDiffProposal1E() int64 {
 	//curPoolSizeAll := curPoolSize + maturingTickets
 	//prevPoolSizeAll := prevPoolSize + prevMaturingTickets
 	//poolSizeChangeRatio := float64(curPoolSizeAll) / float64(prevPoolSizeAll)
-	poolSizeChangeRatio := float64(curPoolSize + immatureTickets) / float64(prevPoolSize)
+	//poolSizeChangeRatio := float64(curPoolSize + immatureTickets) / float64(prevPoolSize)
+	poolSizeChangeRatio := float64(curPoolSize+immatureTickets) / float64(prevPoolSize+prevImmatureTickets)
 
 	// derive ratio of percent of target pool size
 	ticketsPerBlock := int64(s.params.TicketsPerBlock)
-	//targetPoolSize := ticketsPerBlock * int64(s.params.TicketPoolSize)
-	targetPoolSize := ticketsPerBlock * int64(s.params.TicketPoolSize + s.params.TicketMaturity)
-	targetRatio := float64(curPoolSize) / float64(targetPoolSize)
-	//targetRatio := float64(curPoolSizeAll) / float64(targetPoolSize + immatureTickets)
-	//targetRatio := float64(curPoolSizeAll) / float64(targetPoolSize + 2160)
-        // 2160 is (maxTicketsPerBlock - votesPerBlock) * retargetInterval
+	targetPoolSize := ticketsPerBlock * int64(s.params.TicketPoolSize+s.params.TicketMaturity)
+	//targetRatio := float64(curPoolSizeAll) / float64(targetPoolSize)
+	targetRatio := float64(curPoolSize+immatureTickets) / float64(targetPoolSize)
 
 	nextDiff := float64(curDiff) * (poolSizeChangeRatio * targetRatio)
 
