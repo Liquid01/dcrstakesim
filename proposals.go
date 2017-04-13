@@ -78,12 +78,22 @@ func (s *simulator) calcNextStakeDiffProposal1E() int64 {
 	// retarget interval.
 	prevRetargetHeight := nextHeight - int32(intervalSize)
 	prevPoolSize := int64(s.tip.poolSize)
-	prevDiff := s.tip.ticketPrice
+	//prevDiff := s.tip.ticketPrice
 	node := s.ancestorNode(s.tip, prevRetargetHeight, nil)
 	if node != nil {
 		prevPoolSize = int64(node.poolSize)
-		prevDiff = node.ticketPrice
+		//prevDiff = node.ticketPrice
 	}
+
+	// get the total amount of tickets purchased including
+	// the immature ones
+	/*
+	   var totalPurchased int64
+	   prevRetargetHeight := nextHeight - int32(intervalSize)
+	   node := s.ancestorNode(s.tip, prevRetargetHeight, func(n *blockNode) {
+	       totalPurchased += int64(len(n.ticketsAdded))
+	   })
+	*/
 
 	// Return the existing ticket price for the first interval.
 	if prevPoolSize == 0 {
@@ -91,39 +101,156 @@ func (s *simulator) calcNextStakeDiffProposal1E() int64 {
 	}
 
 	// derive ratio of percent change in pool size
+	// max possible poolSizeChangeRatio is 2
 	curPoolSize := int64(s.tip.poolSize)
-	lastRatio := float64(curPoolSize) / float64(prevPoolSize)
+	immatureTickets := int64(len(s.immatureTickets))
+	curPoolSizeAll := curPoolSize + immatureTickets
+	poolSizeChangeRatio := float64(curPoolSizeAll) / float64(prevPoolSize)
 
-	// derive ratio of percent of target pool size
-	ticketsPerBlock := int64(s.params.TicketsPerBlock)
-	targetPoolSize := ticketsPerBlock * int64(s.params.TicketPoolSize)
-	targetRatio := float64(curPoolSize) / float64(targetPoolSize)
-
-	// derive ratio of purchase slots filled
 	/*
+		// derive ratio of purchase slots filled
 	        maxFreshStakePerBlock := int64(s.params.MaxFreshStakePerBlock)
-		//blocksPerWindow := int64(s.params.BlocksPerWindow)
-		blocksPerWindow := int64(144)
+	        //blocksPerWindow := int64(s.params.BlocksPerWindow)
+	        blocksPerWindow := int64(144)
 	        maxFreshStakePerWindow := maxFreshStakePerBlock * blocksPerWindow
 	        freshStakeLastWindow := curPoolSize - prevPoolSize
 	        freshStakeRatio := freshStakeLastWindow / maxFreshStakePerWindow
 	*/
 
-	newDiff := float64(prevDiff) * lastRatio
-        factor := 3.0 // increase the action
+	// derive ratio of percent of target pool size
+	ticketsPerBlock := int64(s.params.TicketsPerBlock)
+	targetPoolSize := ticketsPerBlock * int64(s.params.TicketPoolSize)
+	targetRatio := float64(curPoolSizeAll) / float64(targetPoolSize)
 
-        if lastRatio < 1.0 {
-            newDiff = float64(prevDiff) * (1.0 - (((1.0 - lastRatio) * factor) * (1/targetRatio)))
-        }
-        if lastRatio > 1.0 {
-            newDiff = float64(prevDiff) * (1.0 + (((lastRatio - 1.0) * factor) * targetRatio))
-        }
+	// s.totalSupply
 
-	if int64(newDiff) < s.params.MinimumStakeDiff {
+	/*
+	   ticketsNeeded := targetPoolSize - curPoolSize
+
+	   //curDiff prevDiff
+	   //prevPoolSize curPoolSize targetPoolSize
+
+	   // difference in price from previous window and current window
+	   diffRatio := prevDiff / curDiff
+	*/
+
+	// create var
+	nextDiff := float64(curDiff)
+
+	/*
+	   // ticket pool is not full enough yet
+	   if ticketsNeeded > maxFreshStakePerWindow {
+	       nextDiff = float64(curDiff) * (ticketsPerBlock / maxFreshStakePerBlock)
+	       if int64(nextDiff) < s.params.MinimumStakeDiff {
+	               return s.params.MinimumStakeDiff
+	       }
+	   }
+	*/
+
+	//if ticketsNeeded > freshStakeLastWindow {
+
+	/*
+	   // there was not a price change last window
+	   if priceRatio == 1.0 {
+	       // adjust the price relative to the change in pool size that occured
+	       nextDiff = float64(curDiff) * poolSizeChangeRatio
+	   }
+
+	   if priceRatio > 1.0 {
+	       if ticketsNeeded > maxFreshStakePerWindow {
+	   }
+	*/
+
+	/*
+	   if priceRatio > 1.0 {
+	   // price went up last window
+	       // we are under the target pool size
+	       if targetRatio < 1.0 {
+	       }
+	       // we are over the target pool size
+	       if targetRatio > 1.0 {
+	       }
+	       // we are at the target pool size
+	       if targetRatio == 1.0 {
+	           // price stays the same
+	           nextDiff = float64(curDiff)
+	       }
+	   }
+
+	   if priceRatio < 1.0 {
+	   // price went down last window
+	   }
+
+	   /*
+	   if poolSizeChangeRatio < 1.0 {  // if pool size decreased last window
+	       nextDiff = float64(curDiff) * (1.0 - ((1.0 - poolSizeChangeRatio) * (1/targetRatio)))
+	   }
+	   if poolSizeChangeRatio > 1.0 {  // if pool size increased last window
+	       nextDiff = float64(curDiff) * (1.0 + ((poolSizeChangeRatio - 1.0) * targetRatio))
+	   }
+	   if poolSizeChangeRatio == 1.0 {  // if pool size stayed the same last window
+	       nextDiff = float64(curDiff) * targetRatio
+	   }
+	*/
+
+	//pscrRate is the poolSizeChangeRatio with a multiplying factor
+	factorPSCR := 1.0
+	pscrRate := 1.0
+	if poolSizeChangeRatio < 1.0 {
+		pscrRate = 1.0 - ((1.0 - poolSizeChangeRatio) * factorPSCR)
+	}
+	if poolSizeChangeRatio > 1.0 {
+		pscrRate = 1.0 + ((poolSizeChangeRatio - 1.0) * factorPSCR)
+	}
+	// what about if == 1.0 ?
+
+	//trRate is the amount we should adjust the price relative
+	//to the target pool size
+	factorTR := 1.0
+	trRate := 1.0
+	if targetRatio < 1.0 {
+		trRate = 1 / trRate
+		trRate = ((1.0 - trRate) * factorTR) + 1.0
+		// below pool target amount so decrease price by this much
+	}
+	if targetRatio > 1.0 {
+		trRate = ((1.0 - targetRatio) * factorTR) + 1.0
+		trRate = 1 / trRate
+		// above pool target amount so increase price by this much
+	}
+	// what about if == 1.0
+
+	if targetRatio < 1.0 {
+		nextDiff = float64(curDiff) * (pscrRate * targetRatio)
+	}
+	if targetRatio > 1.0 {
+		nextDiff = float64(curDiff) + 10e8
+		//nextDiff = float64(curDiff) * float64(freshStakeRatio * (maxFreshStakePerBlock/ticketsPerBlock) )
+		/*
+		   if freshStakeRatio > (ticketsPerBlock / maxFreshStakePerBlock) {
+		       nextDiff = float64(curDiff) * (targetRatio * 10)
+		   } else {
+		       nextDiff = float64(curDiff) * pscrRate
+		   }
+		*/
+	}
+	// what if == 1.0
+
+	/*
+	   factor := 1.0 // increase the action
+	   if poolSizeChangeRatio < 1.0 {
+	       nextDiff = float64(curDiff) * (1.0 - (((1.0 - poolSizeChangeRatio) * factor) * (1/targetRatio)))
+	   }
+	   if poolSizeChangeRatio > 1.0 {
+	       nextDiff = float64(curDiff) * (1.0 + (((poolSizeChangeRatio - 1.0) * factor) * targetRatio))
+	   }
+	*/
+
+	if int64(nextDiff) < s.params.MinimumStakeDiff {
 		return s.params.MinimumStakeDiff
 	}
 
-	return int64(newDiff)
+	return int64(nextDiff)
 }
 
 // calcNextStakeDiffProposal2 returns the required stake difficulty (aka ticket
