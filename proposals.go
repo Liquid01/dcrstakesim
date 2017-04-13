@@ -108,13 +108,13 @@ func (s *simulator) calcNextStakeDiffProposal1E() int64 {
 	poolSizeChangeRatio := float64(curPoolSizeAll) / float64(prevPoolSize)
 
 	/*
-		// derive ratio of purchase slots filled
-	        maxFreshStakePerBlock := int64(s.params.MaxFreshStakePerBlock)
-	        //blocksPerWindow := int64(s.params.BlocksPerWindow)
-	        blocksPerWindow := int64(144)
-	        maxFreshStakePerWindow := maxFreshStakePerBlock * blocksPerWindow
-	        freshStakeLastWindow := curPoolSize - prevPoolSize
-	        freshStakeRatio := freshStakeLastWindow / maxFreshStakePerWindow
+			// derive ratio of purchase slots filled
+		        maxFreshStakePerBlock := int64(s.params.MaxFreshStakePerBlock)
+		        //blocksPerWindow := int64(s.params.BlocksPerWindow)
+		        blocksPerWindow := int64(144)
+		        maxFreshStakePerWindow := maxFreshStakePerBlock * blocksPerWindow
+		        freshStakeLastWindow := curPoolSize - prevPoolSize
+		        freshStakeRatio := freshStakeLastWindow / maxFreshStakePerWindow
 	*/
 
 	// derive ratio of percent of target pool size
@@ -193,48 +193,54 @@ func (s *simulator) calcNextStakeDiffProposal1E() int64 {
 	   }
 	*/
 
-	//pscrRate is the poolSizeChangeRatio with a multiplying factor
-	factorPSCR := 1.0
-	pscrRate := 1.0
-	if poolSizeChangeRatio < 1.0 {
-		pscrRate = 1.0 - ((1.0 - poolSizeChangeRatio) * factorPSCR)
-	}
-	if poolSizeChangeRatio > 1.0 {
-		pscrRate = 1.0 + ((poolSizeChangeRatio - 1.0) * factorPSCR)
-	}
-	// what about if == 1.0 ?
+	/*
+		//pscrRate is the poolSizeChangeRatio with a multiplying factor
+		factorPSCR := 1.0
+		pscrRate := 1.0
+		if poolSizeChangeRatio < 1.0 {
+			pscrRate = 1.0 - ((1.0 - poolSizeChangeRatio) * factorPSCR)
+		}
+		if poolSizeChangeRatio > 1.0 {
+			pscrRate = 1.0 + ((poolSizeChangeRatio - 1.0) * factorPSCR)
+		}
+		// what about if == 1.0 ?
 
-	//trRate is the amount we should adjust the price relative
-	//to the target pool size
-	factorTR := 1.0
-	trRate := 1.0
-	if targetRatio < 1.0 {
-		trRate = 1 / trRate
-		trRate = ((1.0 - trRate) * factorTR) + 1.0
-		// below pool target amount so decrease price by this much
-	}
-	if targetRatio > 1.0 {
-		trRate = ((1.0 - targetRatio) * factorTR) + 1.0
-		trRate = 1 / trRate
-		// above pool target amount so increase price by this much
-	}
-	// what about if == 1.0
+		//trRate is the amount we should adjust the price relative
+		//to the target pool size
+		factorTR := 1.0
+		trRate := 1.0
+		if targetRatio < 1.0 {
+			trRate = 1 / trRate
+			trRate = ((1.0 - trRate) * factorTR) + 1.0
+			// below pool target amount so decrease price by this much
+		}
+		if targetRatio > 1.0 {
+			trRate = ((1.0 - targetRatio) * factorTR) + 1.0
+			trRate = 1 / trRate
+			// above pool target amount so increase price by this much
+		}
+		// what about if == 1.0
+	*/
 
-	if targetRatio < 1.0 {
-		nextDiff = float64(curDiff) * (pscrRate * targetRatio)
-	}
-	if targetRatio > 1.0 {
-		nextDiff = float64(curDiff) + 10e8
-		//nextDiff = float64(curDiff) * float64(freshStakeRatio * (maxFreshStakePerBlock/ticketsPerBlock) )
-		/*
-		   if freshStakeRatio > (ticketsPerBlock / maxFreshStakePerBlock) {
-		       nextDiff = float64(curDiff) * (targetRatio * 10)
-		   } else {
-		       nextDiff = float64(curDiff) * pscrRate
-		   }
-		*/
-	}
-	// what if == 1.0
+	/*
+		if targetRatio < 1.0 {
+			nextDiff = float64(curDiff) * (pscrRate * targetRatio)
+		}
+		if targetRatio > 1.0 {
+			nextDiff = float64(curDiff) + 10e8
+			//nextDiff = float64(curDiff) * float64(freshStakeRatio * (maxFreshStakePerBlock/ticketsPerBlock) )
+			/ *
+			   if freshStakeRatio > (ticketsPerBlock / maxFreshStakePerBlock) {
+			       nextDiff = float64(curDiff) * (targetRatio * 10)
+			   } else {
+			       nextDiff = float64(curDiff) * pscrRate
+			   }
+			* /
+		}
+		// what if == 1.0
+	*/
+
+	nextDiff = float64(curDiff) * (poolSizeChangeRatio * targetRatio)
 
 	/*
 	   factor := 1.0 // increase the action
