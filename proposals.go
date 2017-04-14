@@ -113,7 +113,7 @@ func (s *simulator) calcNextStakeDiffProposal1E() int64 {
 	nextDiff := float64(curDiff) * (poolSizeChangeRatio * targetRatio)
 
 	// return maximum value
-	maximumStakeDiff := int64(s.totalSupply.ToCoin()/float64(ticketPoolSize)) * 1e8
+	maximumStakeDiff := int64(s.tip.totalSupply.ToCoin()/float64(ticketPoolSize)) * 1e8
 	if int64(nextDiff) > maximumStakeDiff {
 		return maximumStakeDiff
 	}
