@@ -5,7 +5,6 @@
 package main
 
 import (
-	"fmt"
 	"github.com/davecgh/dcrstakesim/internal/tickettreap"
 )
 
@@ -94,7 +93,6 @@ func (s *simulator) calcNextStakeDiffProposal1E() int64 {
 	relevantNode := s.ancestorNode(s.tip, relevantHeight, nil)
 	s.ancestorNode(relevantNode, relevantHeight-int32(ticketMaturity), func(n *blockNode) {
 		prevImmatureTickets += int64(len(n.ticketsAdded))
-		//fmt.Println(n.height, n.ticketsAdded)
 	})
 
 	// derive ratio of percent change in pool size
@@ -105,70 +103,13 @@ func (s *simulator) calcNextStakeDiffProposal1E() int64 {
 	prevPoolSizeAll := prevPoolSize + prevImmatureTickets
 	poolSizeChangeRatio := float64(curPoolSizeAll) / float64(prevPoolSizeAll)
 
-	ticketsPerBlock := int64(s.params.TicketsPerBlock)
-	// derive ratio of purchase slots filled
-	/*
-		maxFreshStakePerBlock := int64(s.params.MaxFreshStakePerBlock)
-		maxFreshStakePerWindow := maxFreshStakePerBlock * intervalSize
-		freshStakeLastWindow := curPoolSizeAll - prevPoolSizeAll
-		// steady is a consistent flow of tickets in and out
-		// mainnet stead is <0.25 is a drop, >0.25 is a rise
-		steadyFreshStakeRatio := float64(ticketsPerBlock) / float64(maxFreshStakePerBlock)
-		freshStakeRatio := (float64(freshStakeLastWindow) / float64(maxFreshStakePerWindow)) * (1.0 / steadyFreshStakeRatio)
-	*/
-
 	// derive ratio of percent of target pool size
-	//ticketsPerBlock := int64(s.params.TicketsPerBlock)
+	ticketsPerBlock := int64(s.params.TicketsPerBlock)
 	ticketPoolSize := int64(s.params.TicketPoolSize)
 	targetPoolSizeAll := ticketsPerBlock * (ticketPoolSize + ticketMaturity)
 	targetRatio := float64(curPoolSizeAll) / float64(targetPoolSizeAll)
 
-	/*
-		var nextDiff float64
-	        if targetRatio == 1.0 {
-	            // rare case to exactly hit the targetRatio
-		    nextDiff = float64(curDiff) * poolSizeChangeRatio
-	            // or
-		    //nextDiff = float64(curDiff) * (poolSizeChangeRatio * freshStakeRatio)
-	        }
-	        if targetRatio < 1.0 {
-	            weightedTargetRatio := 1.0 - ((1.0 - targetRatio) * freshStakeRatio)
-		    nextDiff = float64(curDiff) * (poolSizeChangeRatio * weightedTargetRatio)
-	        }
-	        if targetRatio > 1.0 {
-		    weightedTargetRatio := ((targetRatio - 1.0) * freshStakeRatio) + 1.0
-		    nextDiff = float64(curDiff) * (poolSizeChangeRatio * weightedTargetRatio)
-	        }
-	*/
-
-	/*
-	        if targetRatio > 1.0 && poolSizeChangeRatio < 1.0 {
-	            // over pool target but shrinking, stay course
-		    nextDiff = float64(curDiff) * poolSizeChangeRatio
-	        } else if targetRatio < 1.0 && poolSizeChangeRatio > 1.0 {
-	            // under pool target but growing, stay course
-		    nextDiff = float64(curDiff) * poolSizeChangeRatio
-	        } else {
-	            // apply targetRatio to correct price
-		    nextDiff = float64(curDiff) * (poolSizeChangeRatio * targetRatio)
-	        }
-	*/
-
-	/*
-	        if targetRatio == 1.0 {
-	            // rare case to exactly hit the targetRatio
-		    nextDiff = float64(curDiff) * (poolSizeChangeRatio * targetRatio)
-	        }
-	        if targetRatio < 1.0 {
-	            weightedTargetRatio := 1.0 - ((1.0 - targetRatio) / 2)
-		    nextDiff = float64(curDiff) * (poolSizeChangeRatio * weightedTargetRatio)
-	        }
-	        if targetRatio > 1.0 {
-		    weightedTargetRatio := ((targetRatio - 1.0) / 2) + 1.0
-		    nextDiff = float64(curDiff) * (poolSizeChangeRatio * weightedTargetRatio)
-	        }
-	*/
-
+	// Voila!
 	nextDiff := float64(curDiff) * (poolSizeChangeRatio * targetRatio)
 
 	// return maximum value
