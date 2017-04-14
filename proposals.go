@@ -5,8 +5,8 @@
 package main
 
 import (
+	"fmt"
 	"github.com/davecgh/dcrstakesim/internal/tickettreap"
-	//"fmt"
 )
 
 // calcNextStakeDiffProposal1 returns the required stake difficulty (aka ticket
@@ -86,43 +86,10 @@ func (s *simulator) calcNextStakeDiffProposal1E() int64 {
 		return curDiff
 	}
 
-	ticketMaturity := int64(s.params.TicketMaturity)
-
-	/*
-		// get the immature tickets that will mature in the next window
-	        // note, make sure we have no off-by-ones here
-	        // 256 - 144 = 112 on mainnet
-	        var maturingTickets int64
-	        var relevantHeight int32
-	        if ticketMaturity >= intervalSize {
-	            relevantHeight = s.tip.height
-	        } else {
-	            relevantHeight = s.tip.height - int32(ticketMaturity - intervalSize)
-	        }
-	        relevantNode := s.ancestorNode(s.tip, relevantHeight, nil)
-	        s.ancestorNode(relevantNode, relevantHeight - int32(intervalSize), func(n *blockNode) {
-	            maturingTickets += int64(len(n.ticketsAdded))
-	            //fmt.Println(n.height, n.ticketsAdded)
-	        })
-
-		// get the immature tickets that will mature in the _previous_ window
-	        // note, make sure we have no off-by-ones here
-	        var prevMaturingTickets int64
-	        if ticketMaturity >= intervalSize {
-		    relevantHeight = s.tip.height - int32(intervalSize)
-	        } else {
-	            relevantHeight = s.tip.height - int32(intervalSize) - int32(ticketMaturity - intervalSize)
-	        }
-	        relevantNode = s.ancestorNode(s.tip, relevantHeight, nil)
-	        s.ancestorNode(relevantNode, relevantHeight - int32(intervalSize), func(n *blockNode) {
-	            prevMaturingTickets += int64(len(n.ticketsAdded))
-	            //fmt.Println(n.height, n.ticketsAdded)
-	        })
-	*/
-
 	// get the immature ticket count from the previous window
 	// note, make sure we have no off-by-ones here
 	var prevImmatureTickets int64
+	ticketMaturity := int64(s.params.TicketMaturity)
 	relevantHeight := s.tip.height - int32(intervalSize) // or nextHeight?
 	relevantNode := s.ancestorNode(s.tip, relevantHeight, nil)
 	s.ancestorNode(relevantNode, relevantHeight-int32(ticketMaturity), func(n *blockNode) {
@@ -130,26 +97,87 @@ func (s *simulator) calcNextStakeDiffProposal1E() int64 {
 		//fmt.Println(n.height, n.ticketsAdded)
 	})
 
-	//immatureTickets := int64(len(s.immatureTickets) * int(intervalSize / ticketMaturity))
-	immatureTickets := int64(len(s.immatureTickets))
-
 	// derive ratio of percent change in pool size
 	// max possible poolSizeChangeRatio is 2
+	immatureTickets := int64(len(s.immatureTickets))
 	curPoolSize := int64(s.tip.poolSize)
-	//curPoolSizeAll := curPoolSize + maturingTickets
-	//prevPoolSizeAll := prevPoolSize + prevMaturingTickets
-	//poolSizeChangeRatio := float64(curPoolSizeAll) / float64(prevPoolSizeAll)
-	//poolSizeChangeRatio := float64(curPoolSize + immatureTickets) / float64(prevPoolSize)
-	poolSizeChangeRatio := float64(curPoolSize+immatureTickets) / float64(prevPoolSize+prevImmatureTickets)
+	curPoolSizeAll := curPoolSize + immatureTickets
+	prevPoolSizeAll := prevPoolSize + prevImmatureTickets
+	poolSizeChangeRatio := float64(curPoolSizeAll) / float64(prevPoolSizeAll)
+
+	ticketsPerBlock := int64(s.params.TicketsPerBlock)
+	// derive ratio of purchase slots filled
+	/*
+		maxFreshStakePerBlock := int64(s.params.MaxFreshStakePerBlock)
+		maxFreshStakePerWindow := maxFreshStakePerBlock * intervalSize
+		freshStakeLastWindow := curPoolSizeAll - prevPoolSizeAll
+		// steady is a consistent flow of tickets in and out
+		// mainnet stead is <0.25 is a drop, >0.25 is a rise
+		steadyFreshStakeRatio := float64(ticketsPerBlock) / float64(maxFreshStakePerBlock)
+		freshStakeRatio := (float64(freshStakeLastWindow) / float64(maxFreshStakePerWindow)) * (1.0 / steadyFreshStakeRatio)
+	*/
 
 	// derive ratio of percent of target pool size
-	ticketsPerBlock := int64(s.params.TicketsPerBlock)
-	targetPoolSize := ticketsPerBlock * int64(s.params.TicketPoolSize+s.params.TicketMaturity)
-	//targetRatio := float64(curPoolSizeAll) / float64(targetPoolSize)
-	targetRatio := float64(curPoolSize+immatureTickets) / float64(targetPoolSize)
+	//ticketsPerBlock := int64(s.params.TicketsPerBlock)
+	ticketPoolSize := int64(s.params.TicketPoolSize)
+	targetPoolSizeAll := ticketsPerBlock * (ticketPoolSize + ticketMaturity)
+	targetRatio := float64(curPoolSizeAll) / float64(targetPoolSizeAll)
+
+	/*
+		var nextDiff float64
+	        if targetRatio == 1.0 {
+	            // rare case to exactly hit the targetRatio
+		    nextDiff = float64(curDiff) * poolSizeChangeRatio
+	            // or
+		    //nextDiff = float64(curDiff) * (poolSizeChangeRatio * freshStakeRatio)
+	        }
+	        if targetRatio < 1.0 {
+	            weightedTargetRatio := 1.0 - ((1.0 - targetRatio) * freshStakeRatio)
+		    nextDiff = float64(curDiff) * (poolSizeChangeRatio * weightedTargetRatio)
+	        }
+	        if targetRatio > 1.0 {
+		    weightedTargetRatio := ((targetRatio - 1.0) * freshStakeRatio) + 1.0
+		    nextDiff = float64(curDiff) * (poolSizeChangeRatio * weightedTargetRatio)
+	        }
+	*/
+
+	/*
+	        if targetRatio > 1.0 && poolSizeChangeRatio < 1.0 {
+	            // over pool target but shrinking, stay course
+		    nextDiff = float64(curDiff) * poolSizeChangeRatio
+	        } else if targetRatio < 1.0 && poolSizeChangeRatio > 1.0 {
+	            // under pool target but growing, stay course
+		    nextDiff = float64(curDiff) * poolSizeChangeRatio
+	        } else {
+	            // apply targetRatio to correct price
+		    nextDiff = float64(curDiff) * (poolSizeChangeRatio * targetRatio)
+	        }
+	*/
+
+	/*
+	        if targetRatio == 1.0 {
+	            // rare case to exactly hit the targetRatio
+		    nextDiff = float64(curDiff) * (poolSizeChangeRatio * targetRatio)
+	        }
+	        if targetRatio < 1.0 {
+	            weightedTargetRatio := 1.0 - ((1.0 - targetRatio) / 2)
+		    nextDiff = float64(curDiff) * (poolSizeChangeRatio * weightedTargetRatio)
+	        }
+	        if targetRatio > 1.0 {
+		    weightedTargetRatio := ((targetRatio - 1.0) / 2) + 1.0
+		    nextDiff = float64(curDiff) * (poolSizeChangeRatio * weightedTargetRatio)
+	        }
+	*/
 
 	nextDiff := float64(curDiff) * (poolSizeChangeRatio * targetRatio)
 
+	// return maximum value
+	maximumStakeDiff := int64(s.totalSupply.ToCoin()/float64(ticketPoolSize)) * 1e8
+	if int64(nextDiff) > maximumStakeDiff {
+		return maximumStakeDiff
+	}
+
+	// return minimum value
 	if int64(nextDiff) < s.params.MinimumStakeDiff {
 		return s.params.MinimumStakeDiff
 	}
