@@ -366,9 +366,10 @@ func main() {
 		"Path to simulation CSV input data -- This overrides numblocks")
 	var numBlocks = flag.Uint64("numblocks", 100000, "Number of blocks to simulate")
 	var pfName = flag.String("pf", "current",
-		"Set the ticket price calculation function -- available options: [current, 1, 2, 3]")
+		"Set the ticket price calculation function -- available options: [current, 1, 1e, 2, 3]")
 	var ddfName = flag.String("ddf", "a",
 		"Set the demand distribution function -- available options: [a, b]")
+	var verbose = flag.Bool("verbose", false, "Print additional details about simulator state")
 	flag.Parse()
 
 	// Generate a CPU profile if requested.
@@ -388,7 +389,7 @@ func main() {
 	// difficulty (aka ticket price) here.  Don't forget to update the help
 	// text for pfName above.
 	// *********************************************************************
-	sim := newSimulator(&chaincfg.MainNetParams)
+	sim := newSimulator(&chaincfg.MainNetParams, *verbose)
 	pfResultsName := *pfName
 	switch *pfName {
 	case "current":
@@ -397,9 +398,9 @@ func main() {
 	case "1":
 		sim.nextTicketPriceFunc = sim.calcNextStakeDiffProposal1
 		pfResultsName = "Proposal 1"
-	case "1E":
-		sim.nextTicketPriceFunc = sim.calcNextStakeDiffProposal1E
-		pfResultsName = "Proposal 1E"
+	case "1e":
+		sim.nextTicketPriceFunc = sim.calcNextStakeDiffProposal1e
+		pfResultsName = "Proposal 1e"
 	case "2":
 		sim.nextTicketPriceFunc = sim.calcNextStakeDiffProposal2
 		pfResultsName = "Proposal 2"
