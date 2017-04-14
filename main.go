@@ -397,6 +397,9 @@ func main() {
 	case "1":
 		sim.nextTicketPriceFunc = sim.calcNextStakeDiffProposal1
 		pfResultsName = "Proposal 1"
+	case "1E":
+		sim.nextTicketPriceFunc = sim.calcNextStakeDiffProposal1E
+		pfResultsName = "Proposal 1E"
 	case "2":
 		sim.nextTicketPriceFunc = sim.calcNextStakeDiffProposal2
 		pfResultsName = "Proposal 2"
