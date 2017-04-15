@@ -51,7 +51,7 @@ func (s *simulator) calcNextStakeDiffProposal1() int64 {
 }
 
 // the algorithm proposed by raedah (enhanced)
-func (s *simulator) calcNextStakeDiffProposal1E() int64 {
+func (s *simulator) calcNextStakeDiffProposal1e() int64 {
 	// Stake difficulty before any tickets could possibly be purchased is
 	// the minimum value.
 	nextHeight := int32(0)
@@ -105,6 +105,7 @@ func (s *simulator) calcNextStakeDiffProposal1E() int64 {
 	// derive ratio of percent of target pool size
 	ticketsPerBlock := int64(s.params.TicketsPerBlock)
 	ticketPoolSize := int64(s.params.TicketPoolSize)
+	targetPoolSize := ticketsPerBlock * ticketPoolSize
 	targetPoolSizeAll := ticketsPerBlock * (ticketPoolSize + ticketMaturity)
 	targetRatio := float64(curPoolSizeAll) / float64(targetPoolSizeAll)
 
@@ -112,7 +113,7 @@ func (s *simulator) calcNextStakeDiffProposal1E() int64 {
 	nextDiff := float64(curDiff) * (poolSizeChangeRatio * targetRatio)
 
 	// return maximum value
-	maximumStakeDiff := int64(float64(s.tip.totalSupply) / float64(ticketPoolSize))
+	maximumStakeDiff := int64(float64(s.tip.totalSupply) / float64(targetPoolSize))
 	if int64(nextDiff) > maximumStakeDiff {
 		return maximumStakeDiff
 	}
