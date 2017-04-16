@@ -10,8 +10,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"math/big"
 	"os"
+	"path/filepath"
 	"runtime/pprof"
 	"strconv"
 	"strings"
@@ -27,6 +29,15 @@ const (
 	// fieldsPerRecord defines the number of fields expected in each line
 	// of the input CSV data.
 	fieldsPerRecord = 3
+)
+
+var (
+	// surgeUpHeight and surgeDownHeight are the heights at which the
+	// simulator will simulate a large portion of new coins available to
+	// stake and a large portion of coins removed from being available to
+	// stake, respectively.
+	surgeUpHeight   uint64
+	surgeDownHeight uint64
 )
 
 // convertRecord converts the passed record, which is expected to be parsed from
@@ -244,6 +255,12 @@ func (s *simulator) demandFuncB(nextHeight int32, ticketPrice int64) float64 {
 	return s.calcYieldDemand(nextHeight, ticketPrice)
 }
 
+// isInSurgeRange returns whether or not the provided height is within the range
+// of blocks defined by the surge up and down heights.
+func isInSurgeRange(height int32) bool {
+	return uint64(height) >= surgeUpHeight && uint64(height) <= surgeDownHeight
+}
+
 // simulate runs the simulation using a calculated demand curve which models
 // how ticket purchasing would typically proceed based upon the price and the
 // VWAP.
@@ -254,6 +271,12 @@ func (s *simulator) simulate(numBlocks uint64) error {
 	stakeDiffWindowSize := int32(s.params.StakeDiffWindowSize)
 	maxNewTicketsPerBlock := int32(s.params.MaxFreshStakePerBlock)
 	maxTicketsPerWindow := maxNewTicketsPerBlock * stakeDiffWindowSize
+
+	// Heights relative to the total number of blocks at which to surge the
+	// amount of coins avilable to stake up and down.  This is 60% and 80%,
+	// respectively.
+	surgeUpHeight = numBlocks * 3 / 5
+	surgeDownHeight = numBlocks * 4 / 5
 
 	demandPerWindow := maxTicketsPerWindow
 	for i := uint64(0); i < numBlocks; i++ {
@@ -282,6 +305,10 @@ func (s *simulator) simulate(numBlocks uint64) error {
 					"demand of %v which is not in the "+
 					"range of [0, 1]", demand))
 			}
+			// Double the demand during the surge range.
+			if isInSurgeRange(nextHeight) {
+				demand = math.Min(1, demand*2)
+			}
 			demandPerWindow = int32(float64(maxTicketsPerWindow) * demand)
 		}
 
@@ -291,19 +318,17 @@ func (s *simulator) simulate(numBlocks uint64) error {
 			newTickets = uint8(maxPossible)
 		}
 
-		// TODO(davec): Account for tickets being purchased.
 		// Limit the total staked coins to 40% of the total supply
-		// except for in between blocks that are 60% and 80% of the
-		// total number of blocks to simulate which limit to 50% of the
-		// total supply in order to simulate a sudden surge and drop the
-		// amount of stake coins.
-		if uint64(nextHeight) < (numBlocks*3/5) ||
-			uint64(nextHeight) > (numBlocks*4/5) {
+		// except for in between blocks that defined for the surge up
+		// down heights which limit to 60% of the total supply in order
+		// to simulate a sudden surge and drop the amount of staked
+		// coins.
+		if !isInSurgeRange(nextHeight) {
 			if newTickets > 0 && stakedCoins > (totalSupply*2/5) {
 				newTickets = 0
 			}
 		} else {
-			if newTickets > 0 && stakedCoins > (totalSupply/2) {
+			if newTickets > 0 && stakedCoins > (totalSupply*3/5) {
 				newTickets = 0
 			}
 		}
@@ -340,8 +365,11 @@ func main() {
 	var csvPath = flag.String("inputcsv", "",
 		"Path to simulation CSV input data -- This overrides numblocks")
 	var numBlocks = flag.Uint64("numblocks", 100000, "Number of blocks to simulate")
+	var pfName = flag.String("pf", "current",
+		"Set the ticket price calculation function -- available options: [current, 1, 1E, 2, 3]")
 	var ddfName = flag.String("ddf", "a",
 		"Set the demand distribution function -- available options: [a, b]")
+	var verbose = flag.Bool("verbose", false, "Print additional details about simulator state")
 	flag.Parse()
 
 	// Generate a CPU profile if requested.
@@ -357,15 +385,33 @@ func main() {
 	}
 
 	// *********************************************************************
-	// NOTE: Set a different function to calculate the next required stake
-	// difficulty (aka ticket price) here.
+	// NOTE: Add any new functions to calculate the next required stake
+	// difficulty (aka ticket price) here.  Don't forget to update the help
+	// text for pfName above.
 	// *********************************************************************
-	sim := newSimulator(&chaincfg.MainNetParams)
-	//sim.nextTicketPriceFunc = sim.curCalcNextStakeDiff
-	//sim.nextTicketPriceFunc = sim.calcNextStakeDiffProposal1
-	sim.nextTicketPriceFunc = sim.calcNextStakeDiffProposal1E
-	//sim.nextTicketPriceFunc = sim.calcNextStakeDiffProposal2
-	//sim.nextTicketPriceFunc = sim.calcNextStakeDiffProposal3
+	sim := newSimulator(&chaincfg.MainNetParams, *verbose)
+	pfResultsName := *pfName
+	switch *pfName {
+	case "current":
+		sim.nextTicketPriceFunc = sim.curCalcNextStakeDiff
+		pfResultsName = "Current algorithm"
+	case "1":
+		sim.nextTicketPriceFunc = sim.calcNextStakeDiffProposal1
+		pfResultsName = "Proposal 1"
+	case "1E":
+		sim.nextTicketPriceFunc = sim.calcNextStakeDiffProposal1E
+		pfResultsName = "Proposal 1E"
+	case "2":
+		sim.nextTicketPriceFunc = sim.calcNextStakeDiffProposal2
+		pfResultsName = "Proposal 2"
+	case "3":
+		sim.nextTicketPriceFunc = sim.calcNextStakeDiffProposal3
+		pfResultsName = "Proposal 3"
+	default:
+		fmt.Printf("%q is not a valid ticket price func name\n",
+			*pfName)
+		return
+	}
 
 	// *********************************************************************
 	// NOTE: Add any new demand distribution functions to return the
@@ -373,11 +419,14 @@ func main() {
 	// purchase within a given stake difficulty interval).  The returned
 	// result must be in the range [0, 1].
 	// *********************************************************************
+	ddfResultsName := *ddfName
 	switch *ddfName {
 	case "a":
 		sim.demandFunc = sim.demandFuncA
+		ddfResultsName = "a - Purchase based on estimated nominal yield and volume-weighted average price"
 	case "b":
 		sim.demandFunc = sim.demandFuncB
+		ddfResultsName = "b - Purchase based on estimated nominal yield"
 	default:
 		fmt.Printf("%q is not a valid demand distribution func name\n",
 			*ddfName)
@@ -393,7 +442,8 @@ func main() {
 			return
 		}
 	} else {
-		fmt.Printf("Running simulation for %d blocks.\n", *numBlocks)
+		fmt.Printf("Running simulation for %d blocks, price func %s, "+
+			"demand func %s.\n", *numBlocks, *pfName, *ddfName)
 		fmt.Printf("Height")
 		if err := sim.simulate(*numBlocks); err != nil {
 			fmt.Println(err)
@@ -404,7 +454,11 @@ func main() {
 	fmt.Println("Simulation took", time.Since(startTime))
 
 	// Generate the simulation results and open them in a browser.
-	if err := generateResults(sim); err != nil {
+	fileName := fmt.Sprintf("dcrstakesim-%s-pf%s-ddf%s-blocks%d.html", time.Now().
+		Format("2006-01-02-150405"), *pfName, *ddfName, *numBlocks)
+	resultsPath := filepath.Join(os.TempDir(), fileName)
+	err := generateResults(sim, resultsPath, pfResultsName, ddfResultsName)
+	if err != nil {
 		fmt.Println(err)
 		return
 	}

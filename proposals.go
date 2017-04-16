@@ -32,8 +32,7 @@ func (s *simulator) calcNextStakeDiffProposal1() int64 {
 		return curDiff
 	}
 
-	// Attempt to get the ticket price and pool size from the previous
-	// retarget interval.
+	// Attempt to get the pool size from the previous retarget interval.
 	var prevPoolSize int64
 	prevRetargetHeight := nextHeight - int32(intervalSize)
 	node := s.ancestorNode(s.tip, prevRetargetHeight, nil)
@@ -106,6 +105,7 @@ func (s *simulator) calcNextStakeDiffProposal1E() int64 {
 	// derive ratio of percent of target pool size
 	ticketsPerBlock := int64(s.params.TicketsPerBlock)
 	ticketPoolSize := int64(s.params.TicketPoolSize)
+	targetPoolSize := ticketsPerBlock * ticketPoolSize
 	targetPoolSizeAll := ticketsPerBlock * (ticketPoolSize + ticketMaturity)
 	targetRatio := float64(curPoolSizeAll) / float64(targetPoolSizeAll)
 
@@ -113,7 +113,7 @@ func (s *simulator) calcNextStakeDiffProposal1E() int64 {
 	nextDiff := float64(curDiff) * (poolSizeChangeRatio * targetRatio)
 
 	// return maximum value
-	maximumStakeDiff := int64(s.tip.totalSupply.ToCoin()/float64(ticketPoolSize)) * 1e8
+	maximumStakeDiff := int64(float64(s.tip.totalSupply) / float64(targetPoolSize))
 	if int64(nextDiff) > maximumStakeDiff {
 		return maximumStakeDiff
 	}
