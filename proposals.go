@@ -112,15 +112,23 @@ func (s *simulator) calcNextStakeDiffProposal1E() int64 {
 	// Voila!
 	nextDiff := float64(curDiff) * (poolSizeChangeRatio * targetRatio)
 
-	// return maximum value
 	maximumStakeDiff := int64(float64(s.tip.totalSupply) / float64(targetPoolSize))
+	minimumStakeDiff := s.params.MinimumStakeDiff
+
+	// when rising above minimum for the first time,
+	// go straight to the maximum
+	if curDiff == minimumStakeDiff && int64(nextDiff) != minimumStakeDiff {
+		return maximumStakeDiff
+	}
+
+	// return maximum value
 	if int64(nextDiff) > maximumStakeDiff {
 		return maximumStakeDiff
 	}
 
 	// return minimum value
-	if int64(nextDiff) < s.params.MinimumStakeDiff {
-		return s.params.MinimumStakeDiff
+	if int64(nextDiff) < minimumStakeDiff {
+		return minimumStakeDiff
 	}
 
 	return int64(nextDiff)
