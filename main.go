@@ -255,6 +255,15 @@ func (s *simulator) demandFuncB(nextHeight int32, ticketPrice int64) float64 {
 	return s.calcYieldDemand(nextHeight, ticketPrice)
 }
 
+// demandFuncC alternate between demandFuncA and demandFuncB each block
+func (s *simulator) demandFuncC(nextHeight int32, ticketPrice int64) float64 {
+	if nextHeight%2 == 0 {
+		return s.demandFuncA(nextHeight, ticketPrice)
+	} else {
+		return s.demandFuncB(nextHeight, ticketPrice)
+	}
+}
+
 // isInSurgeRange returns whether or not the provided height is within the range
 // of blocks defined by the surge up and down heights.
 func isInSurgeRange(height int32) bool {
@@ -368,7 +377,7 @@ func main() {
 	var pfName = flag.String("pf", "current",
 		"Set the ticket price calculation function -- available options: [current, 1, 1E, 2, 3]")
 	var ddfName = flag.String("ddf", "a",
-		"Set the demand distribution function -- available options: [a, b]")
+		"Set the demand distribution function -- available options: [a, b, c]")
 	var verbose = flag.Bool("verbose", false, "Print additional details about simulator state")
 	flag.Parse()
 
@@ -427,6 +436,9 @@ func main() {
 	case "b":
 		sim.demandFunc = sim.demandFuncB
 		ddfResultsName = "b - Purchase based on estimated nominal yield"
+	case "c":
+		sim.demandFunc = sim.demandFuncC
+		ddfResultsName = "c - Alternative between A and B each block"
 	default:
 		fmt.Printf("%q is not a valid demand distribution func name\n",
 			*ddfName)
