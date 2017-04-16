@@ -6,6 +6,7 @@ package main
 
 import (
 	"github.com/davecgh/dcrstakesim/internal/tickettreap"
+        //"math"
 )
 
 // calcNextStakeDiffProposal1 returns the required stake difficulty (aka ticket
@@ -111,22 +112,16 @@ func (s *simulator) calcNextStakeDiffProposal1E() int64 {
 
 	// Voila!
 	nextDiff := float64(curDiff) * (poolSizeChangeRatio * targetRatio)
-
-	maximumStakeDiff := int64(float64(s.tip.totalSupply) / float64(targetPoolSize))
-	minimumStakeDiff := s.params.MinimumStakeDiff
-
-	// when rising above minimum for the first time,
-	// go straight to the maximum
-	if curDiff == minimumStakeDiff && int64(nextDiff) != minimumStakeDiff {
-		return maximumStakeDiff
-	}
+	//nextDiff := float64(curDiff) * (math.Pow(poolSizeChangeRatio, 1 / targetRatio) * targetRatio)
 
 	// return maximum value
+	maximumStakeDiff := int64(float64(s.tip.totalSupply) / float64(targetPoolSize))
 	if int64(nextDiff) > maximumStakeDiff {
 		return maximumStakeDiff
 	}
 
 	// return minimum value
+	minimumStakeDiff := s.params.MinimumStakeDiff
 	if int64(nextDiff) < minimumStakeDiff {
 		return minimumStakeDiff
 	}
