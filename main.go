@@ -257,10 +257,11 @@ func (s *simulator) demandFuncB(nextHeight int32, ticketPrice int64) float64 {
 
 // demandFuncC alternate between demandFuncA and demandFuncB each block
 func (s *simulator) demandFuncC(nextHeight int32, ticketPrice int64) float64 {
-	if nextHeight%2 == 0 {
-		return s.demandFuncA(nextHeight, ticketPrice)
-	} else {
+        freq := int32(50)
+	if nextHeight % freq == 0 {
 		return s.demandFuncB(nextHeight, ticketPrice)
+	} else {
+		return s.demandFuncA(nextHeight, ticketPrice)
 	}
 }
 

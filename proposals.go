@@ -114,16 +114,26 @@ func (s *simulator) calcNextStakeDiffProposal1E() int64 {
 	nextDiff := float64(curDiff) * (poolSizeChangeRatio * targetRatio)
 	//nextDiff := float64(curDiff) * (math.Pow(poolSizeChangeRatio, 1 / targetRatio) * targetRatio)
 
-	// return maximum value
-	maximumStakeDiff := int64(float64(s.tip.totalSupply) / float64(targetPoolSize))
-	if int64(nextDiff) > maximumStakeDiff {
-		return maximumStakeDiff
-	}
+        // use dynamic minimum and maximum sdiff bounds
+	maximumStakeDiff := float64(s.tip.totalSupply) / float64(targetPoolSize)
+	minimumStakeDiff := float64(s.tip.stakedCoins) / float64(targetPoolSize)
+        if targetRatio > 1.0 {
+	    maximumStakeDiff = (float64(s.tip.totalSupply) / float64(targetPoolSize)) * (1/targetRatio)
+        }
+        if targetRatio < 1.0 {
+	    minimumStakeDiff = (float64(s.tip.stakedCoins) / float64(targetPoolSize)) / (1/targetRatio)
+        }
 
-	// return minimum value
-	minimumStakeDiff := s.params.MinimumStakeDiff
-	if int64(nextDiff) < minimumStakeDiff {
-		return minimumStakeDiff
+	if nextDiff > maximumStakeDiff {
+            nextDiff = maximumStakeDiff
+        }
+	if nextDiff < minimumStakeDiff {
+            nextDiff = minimumStakeDiff
+        }
+
+	// legacy minimum value
+	if int64(nextDiff) < s.params.MinimumStakeDiff {
+		return s.params.MinimumStakeDiff
 	}
 
 	return int64(nextDiff)
