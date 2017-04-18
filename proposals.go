@@ -6,7 +6,7 @@ package main
 
 import (
 	"github.com/davecgh/dcrstakesim/internal/tickettreap"
-	//"math"
+	"math"
 )
 
 // calcNextStakeDiffProposal1 returns the required stake difficulty (aka ticket
@@ -105,83 +105,30 @@ func (s *simulator) calcNextStakeDiffProposal1E() int64 {
 
 	// derive ratio of percent of target pool size
 	ticketsPerBlock := int64(s.params.TicketsPerBlock)
-	//ticketsPerWindow := ticketsPerBlock * intervalSize
+	ticketsPerWindow := ticketsPerBlock * intervalSize
 	ticketPoolSize := int64(s.params.TicketPoolSize)
 	targetPoolSize := ticketsPerBlock * ticketPoolSize
 	targetPoolSizeAll := ticketsPerBlock * (ticketPoolSize + ticketMaturity)
 	targetRatio := float64(curPoolSizeAll) / float64(targetPoolSizeAll)
 
-	// derive ratio of purchase slots filled
-	//maxFreshStakePerBlock := int64(s.params.MaxFreshStakePerBlock)
-	//maxFreshStakePerWindow := maxFreshStakePerBlock * intervalSize
-	/*
-	   freshStakeLastWindow := curPoolSizeAll - prevPoolSizeAll
-	   // steady is a consistent flow of tickets in and out
-	   // mainnet stead is <0.25 is a drop, >0.25 is a rise
-	   steadyFreshStakeRatio := float64(ticketsPerBlock) / float64(maxFreshStakePerBlock)
-	   freshStakeRatio := (float64(freshStakeLastWindow) / float64(maxFreshStakePerWindow)) * (1.0 / steadyFreshStakeRatio)
-	*/
+	// purchase slots
+	maxFreshStakePerBlock := int64(s.params.MaxFreshStakePerBlock)
+	maxFreshStakePerWindow := maxFreshStakePerBlock * intervalSize
 
 	// Voila!
-	//nextDiff := float64(curDiff) * poolSizeChangeRatio * targetRatio
-	//nextDiff := float64(curDiff) * (math.Pow(poolSizeChangeRatio, 1 / targetRatio) * targetRatio)
-	//nextDiff := float64(curDiff) * (math.Pow(poolSizeChangeRatio, 1 / targetRatio) * (math.Pow(targetRatio, 1/targetRatio)))
-
-	//windowScew := math.Abs((float64(targetPoolSizeAll) / float64(ticketsPerWindow)) - (float64(targetPoolSizeAll) / float64(ticketsPerWindow)))
-	//nextDiff := float64(curDiff) * poolSizeChangeRatio * (math.Pow(targetRatio, windowScew)) * targetRatio
-
 	nextDiff := float64(curDiff) * poolSizeChangeRatio * targetRatio
 
-	/*
-	   if poolSizeChangeRatio > 1.0 { // if price is going up
-	       relativeIntervals := math.Abs(float64(targetPoolSizeAll - curPoolSizeAll)) / float64(maxFreshStakePerWindow)
-	       nextDiff = float64(curDiff) * math.Pow(poolSizeChangeRatio, relativeIntervals) * targetRatio
-	   }
-	   if poolSizeChangeRatio < 1.0 {  // if price is going down
-	       relativeIntervals := math.Abs(float64(targetPoolSizeAll - curPoolSizeAll)) / float64(ticketsPerWindow)
-	       nextDiff = float64(curDiff) * math.Pow(poolSizeChangeRatio, relativeIntervals) * targetRatio
-	   }
-	*/
-
-	//totalIntervals := float64(targetPoolSizeAll) / tixmov
-
-	//nextDiff := float64(curDiff) * (math.Pow(poolSizeChangeRatio, windowScew) * targetRatio)
-	//nextDiff := float64(curDiff) * poolSizeChangeRatio * (math.Pow(targetRatio, 1 / windowScew))
-	//nextDiff := float64(curDiff) * (math.Pow(poolSizeChangeRatio, windowScew) * (math.Pow(targetRatio, windowScew)))
-
-	/*
-	        var nextDiff float64
-	        if freshStakeRatio := 0.0 {
-		    nextDiff = float64(curDiff) * (math.Pow(poolSizeChangeRatio, 1 / targetRatio) * targetRatio)
-	        } else {
-		    nextDiff = float64(curDiff) * (math.Pow(poolSizeChangeRatio, 1 / targetRatio) * targetRatio)
-	        }
-	*/
-
-	// use dynamic minimum and maximum sdiff bounds
-	//maximumStakeDiff := float64(s.tip.totalSupply) / float64(targetPoolSize)
-	//minimumStakeDiff := float64(s.tip.stakedCoins) / float64(targetPoolSize)
-
-	/*
-	        if targetRatio > 1.0 {
-		    maximumStakeDiff = (float64(s.tip.totalSupply) / float64(targetPoolSize)) * (1/targetRatio)
-	        }
-		if nextDiff > maximumStakeDiff {
-	            nextDiff = maximumStakeDiff
-	        }
-	*/
-	/*
-
-	        if targetRatio < 1.0 {
-		    minimumStakeDiff = (float64(s.tip.stakedCoins) / float64(targetPoolSize)) / (1/targetRatio)
-	        }
-		if nextDiff < minimumStakeDiff {
-	            nextDiff = minimumStakeDiff
-	        }
-	*/
+	// accelerate for target, gravity for price moves
+	if poolSizeChangeRatio > 1.0 { // if price is going up
+		relativeIntervals := math.Abs(float64(targetPoolSizeAll-curPoolSizeAll)) / float64(maxFreshStakePerWindow)
+		nextDiff = float64(curDiff) * math.Pow(poolSizeChangeRatio, relativeIntervals) * targetRatio
+	}
+	if poolSizeChangeRatio < 1.0 { // if price is going down
+		relativeIntervals := math.Abs(float64(targetPoolSizeAll-curPoolSizeAll)) / float64(ticketsPerWindow)
+		nextDiff = float64(curDiff) * math.Pow(poolSizeChangeRatio, relativeIntervals) * targetRatio
+	}
 
 	maximumStakeDiff := int64(float64(s.tip.totalSupply) / float64(targetPoolSize))
-	//maximumStakeDiff := int64((float64(s.tip.totalSupply) / float64(targetPoolSize)) * (1 / (float64(s.tip.stakedCoins) / float64(s.tip.totalSupply))))
 	if int64(nextDiff) > maximumStakeDiff {
 		if maximumStakeDiff > s.params.MinimumStakeDiff {
 			return maximumStakeDiff
