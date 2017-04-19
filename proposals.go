@@ -165,10 +165,9 @@ func (s *simulator) calcNextStakeDiffProposal1F() int64 {
 	}
 
 	// get the immature ticket count from the previous window
-	// note, make sure we have no off-by-ones here
 	var prevImmatureTickets int64
 	ticketMaturity := int64(s.params.TicketMaturity)
-	relevantHeight := s.tip.height - int32(intervalSize) // or nextHeight?
+	relevantHeight := s.tip.height - int32(intervalSize)
 	relevantNode := s.ancestorNode(s.tip, relevantHeight, nil)
 	s.ancestorNode(relevantNode, relevantHeight-int32(ticketMaturity), func(n *blockNode) {
 		prevImmatureTickets += int64(len(n.ticketsAdded))
@@ -190,19 +189,19 @@ func (s *simulator) calcNextStakeDiffProposal1F() int64 {
 	targetPoolSizeAll := ticketsPerBlock * (ticketPoolSize + ticketMaturity)
 	targetRatio := float64(curPoolSizeAll) / float64(targetPoolSizeAll)
 
-	// gravity acceleration around target pool size
+	// strength of gravity for acceleration around target pool size
 	relativeIntervals := math.Abs(float64(targetPoolSizeAll-curPoolSizeAll)) / float64(ticketsPerWindow)
 
 	// Voila!
 	nextDiff := float64(curDiff) * math.Pow(poolSizeChangeRatio, relativeIntervals) * targetRatio
 
-	maximumStakeDiff := int64(float64(s.tip.totalSupply) / float64(targetPoolSize))
 	// ramp up price during initial pool population
+	maximumStakeDiff := int64(float64(s.tip.totalSupply) / float64(targetPoolSize))
 	if int64(nextDiff) > maximumStakeDiff && targetRatio < 1.0 {
 		nextDiff = float64(maximumStakeDiff) * targetRatio
 	}
 
-	// not necessary, but keeps the price at chart scale
+	// optional
 	if int64(nextDiff) > maximumStakeDiff {
 		if maximumStakeDiff < s.params.MinimumStakeDiff {
 			return s.params.MinimumStakeDiff
