@@ -12,6 +12,7 @@ import (
 	"io"
 	"math"
 	"math/big"
+	//"math/rand"
 	"os"
 	"path/filepath"
 	"runtime/pprof"
@@ -245,6 +246,19 @@ func (s *simulator) demandFuncA(nextHeight int32, ticketPrice int64) float64 {
 	if yieldDemand == 1.0 && vwapDemand == 0.0 {
 		demand = 1.0
 	}
+
+	/*
+	   rand.Seed(time.Now().UTC().UnixNano())
+	   scew := 0.25
+	   if demand <= (1.0 - scew) && demand >= scew {
+	       demand = demand - scew + (rand.Float64() * (scew+scew))
+	   } else if demand > (1.0 - scew) {
+	       demand = demand - (rand.Float64() * scew)
+	   } else if demand < scew {
+	       demand = demand + (rand.Float64() * scew)
+	   }
+	*/
+
 	return demand
 }
 
@@ -252,7 +266,21 @@ func (s *simulator) demandFuncA(nextHeight int32, ticketPrice int64) float64 {
 // tickets to purchase within a given stake difficulty interval) based upon the
 // estimated yield purchasing a ticket would produce.
 func (s *simulator) demandFuncB(nextHeight int32, ticketPrice int64) float64 {
-	return s.calcYieldDemand(nextHeight, ticketPrice)
+	demand := s.calcYieldDemand(nextHeight, ticketPrice)
+
+	/*
+	   rand.Seed(time.Now().UTC().UnixNano())
+	   scew := 0.25
+	   if demand <= (1.0 - scew) && demand >= scew {
+	       demand = demand - scew + (rand.Float64() * (scew+scew))
+	   } else if demand > (1.0 - scew) {
+	       demand = demand - (rand.Float64() * scew)
+	   } else if demand < scew {
+	       demand = demand + (rand.Float64() * scew)
+	   }
+	*/
+
+	return demand
 }
 
 // demandFuncC alternate between demandFuncA and demandFuncB each block
@@ -272,6 +300,11 @@ func (s *simulator) demandFuncD(nextHeight int32, ticketPrice int64) float64 {
 	} else {
 		return s.demandFuncA(nextHeight, ticketPrice)
 	}
+}
+
+// demandFuncConst returns a constant demand
+func (s *simulator) demandFuncConst(nextHeight int32, ticketPrice int64) float64 {
+	return 1.0
 }
 
 // isInSurgeRange returns whether or not the provided height is within the range
@@ -387,7 +420,7 @@ func main() {
 	var pfName = flag.String("pf", "current",
 		"Set the ticket price calculation function -- available options: [current, 1, 1E, 1F, 2, 3]")
 	var ddfName = flag.String("ddf", "a",
-		"Set the demand distribution function -- available options: [a, b, c, d]")
+		"Set the demand distribution function -- available options: [a, b, c, d, const]")
 	var verbose = flag.Bool("verbose", false, "Print additional details about simulator state")
 	flag.Parse()
 
@@ -455,6 +488,9 @@ func main() {
 	case "d":
 		sim.demandFunc = sim.demandFuncD
 		ddfResultsName = "d - A till block 5000 then use B"
+	case "const":
+		sim.demandFunc = sim.demandFuncConst
+		ddfResultsName = "const - Constant demand"
 	default:
 		fmt.Printf("%q is not a valid demand distribution func name\n",
 			*ddfName)

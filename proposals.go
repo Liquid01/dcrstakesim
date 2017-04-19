@@ -113,12 +113,13 @@ func (s *simulator) calcNextStakeDiffProposal1E() int64 {
 	// Voila!
 	nextDiff := float64(curDiff) * poolSizeChangeRatio * targetRatio
 
+	// insure the pool gets fully populated
 	maximumStakeDiff := int64(float64(s.tip.totalSupply) / float64(targetPoolSize))
 	if int64(nextDiff) > maximumStakeDiff {
-		if maximumStakeDiff > s.params.MinimumStakeDiff {
-			return maximumStakeDiff
+		if maximumStakeDiff < s.params.MinimumStakeDiff {
+			return s.params.MinimumStakeDiff
 		}
-		return s.params.MinimumStakeDiff
+		return maximumStakeDiff
 	}
 
 	// hard coded minimum value
@@ -189,22 +190,24 @@ func (s *simulator) calcNextStakeDiffProposal1F() int64 {
 	targetPoolSizeAll := ticketsPerBlock * (ticketPoolSize + ticketMaturity)
 	targetRatio := float64(curPoolSizeAll) / float64(targetPoolSizeAll)
 
-	// Voila!
-	nextDiff := float64(curDiff) * poolSizeChangeRatio * targetRatio
+	// gravity acceleration around target pool size
+	relativeIntervals := math.Abs(float64(targetPoolSizeAll-curPoolSizeAll)) / float64(ticketsPerWindow)
 
-	// add gravity acceleration around target pool size
-	if poolSizeChangeRatio != 1.0 {
-		relativeIntervals := math.Abs(float64(targetPoolSizeAll-curPoolSizeAll)) / float64(ticketsPerWindow)
-		nextDiff = float64(curDiff) * math.Pow(poolSizeChangeRatio, relativeIntervals) * targetRatio
+	// Voila!
+	nextDiff := float64(curDiff) * math.Pow(poolSizeChangeRatio, relativeIntervals) * targetRatio
+
+	maximumStakeDiff := int64(float64(s.tip.totalSupply) / float64(targetPoolSize))
+	// ramp up price during initial pool population
+	if int64(nextDiff) > maximumStakeDiff && targetRatio < 1.0 {
+		nextDiff = float64(maximumStakeDiff) * targetRatio
 	}
 
 	// not necessary, but keeps the price at chart scale
-	maximumStakeDiff := int64(float64(s.tip.totalSupply) / float64(targetPoolSize))
 	if int64(nextDiff) > maximumStakeDiff {
-		if maximumStakeDiff > s.params.MinimumStakeDiff {
-			return maximumStakeDiff
+		if maximumStakeDiff < s.params.MinimumStakeDiff {
+			return s.params.MinimumStakeDiff
 		}
-		return s.params.MinimumStakeDiff
+		return maximumStakeDiff
 	}
 
 	// hard coded minimum value
