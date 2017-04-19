@@ -202,24 +202,24 @@ func (s *simulator) calcNextStakeDiffProposal1F() int64 {
 	targetPoolSizeAll := ticketsPerBlock * (ticketPoolSize + ticketMaturity)
 	targetRatio := float64(curPoolSizeAll) / float64(targetPoolSizeAll)
 
-	// strength of gravity for acceleration around target pool size
-	relativeIntervals := math.Abs(float64(targetPoolSizeAll-curPoolSizeAll)) / float64(ticketsPerWindow)
-
-	// Increase downward price action so that it matches upward speed.
-	// Upward price movements are stronger then downward movements
-	// So give downward movements more relative strength
-	// for the market to respond and give its input
+	// Voila!
+	var nextDiff float64
 	if poolSizeChangeRatio < 1.0 {
+		// Increase downward price action so that it matches upward speed.
+		// Upward price movements are stronger then downward movements
+		// So give downward movements more relative strength
+		// for the market to respond and give its input
 		maxFreshStakePerBlock := int64(s.params.MaxFreshStakePerBlock)
 		maxFreshStakePerWindow := maxFreshStakePerBlock * intervalSize
 		thisRatio := float64(maxFreshStakePerWindow) / float64(ticketsPerWindow)
-		relativeIntervals = relativeIntervals * thisRatio
 		sizeDiff := float64(prevPoolSizeAll) - float64(curPoolSizeAll)
 		poolSizeChangeRatio = (float64(prevPoolSizeAll) - (sizeDiff * thisRatio)) / float64(prevPoolSizeAll)
+		nextDiff = float64(curDiff) * poolSizeChangeRatio * targetRatio
+	} else {
+		// strength of gravity for acceleration above target pool size
+		relativeIntervals := math.Abs(float64(targetPoolSizeAll-curPoolSizeAll)) / float64(ticketsPerWindow)
+		nextDiff = float64(curDiff) * math.Pow(poolSizeChangeRatio, relativeIntervals) * targetRatio
 	}
-
-	// Voila!
-	nextDiff := float64(curDiff) * math.Pow(poolSizeChangeRatio, relativeIntervals) * targetRatio
 
 	// ramp up price during initial pool population
 	maximumStakeDiff := int64(float64(s.tip.totalSupply) / float64(targetPoolSize))
@@ -228,12 +228,14 @@ func (s *simulator) calcNextStakeDiffProposal1F() int64 {
 	}
 
 	// optional
-	if int64(nextDiff) > maximumStakeDiff {
-		if maximumStakeDiff < s.params.MinimumStakeDiff {
-			return s.params.MinimumStakeDiff
+	/*
+		if int64(nextDiff) > maximumStakeDiff {
+			if maximumStakeDiff < s.params.MinimumStakeDiff {
+				return s.params.MinimumStakeDiff
+			}
+			return maximumStakeDiff
 		}
-		return maximumStakeDiff
-	}
+	*/
 
 	// hard coded minimum value
 	if int64(nextDiff) < s.params.MinimumStakeDiff {
