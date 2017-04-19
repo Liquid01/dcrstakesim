@@ -105,10 +105,23 @@ func (s *simulator) calcNextStakeDiffProposal1E() int64 {
 
 	// derive ratio of percent of target pool size
 	ticketsPerBlock := int64(s.params.TicketsPerBlock)
+	ticketsPerWindow := ticketsPerBlock * intervalSize
 	ticketPoolSize := int64(s.params.TicketPoolSize)
 	targetPoolSize := ticketsPerBlock * ticketPoolSize
 	targetPoolSizeAll := ticketsPerBlock * (ticketPoolSize + ticketMaturity)
 	targetRatio := float64(curPoolSizeAll) / float64(targetPoolSizeAll)
+
+	// Increase downward price action so that it matches upward speed.
+	// Upward price movements are stronger then downward movements
+	// So give downward movements more relative strength
+	// for the market to respond and give its input
+	if poolSizeChangeRatio < 1.0 {
+		maxFreshStakePerBlock := int64(s.params.MaxFreshStakePerBlock)
+		maxFreshStakePerWindow := maxFreshStakePerBlock * intervalSize
+		thisRatio := float64(maxFreshStakePerWindow) / float64(ticketsPerWindow)
+		sizeDiff := float64(prevPoolSizeAll) - float64(curPoolSizeAll)
+		poolSizeChangeRatio = (float64(prevPoolSizeAll) - (sizeDiff * thisRatio)) / float64(prevPoolSizeAll)
+	}
 
 	// Voila!
 	nextDiff := float64(curDiff) * poolSizeChangeRatio * targetRatio
@@ -191,6 +204,19 @@ func (s *simulator) calcNextStakeDiffProposal1F() int64 {
 
 	// strength of gravity for acceleration around target pool size
 	relativeIntervals := math.Abs(float64(targetPoolSizeAll-curPoolSizeAll)) / float64(ticketsPerWindow)
+
+	// Increase downward price action so that it matches upward speed.
+	// Upward price movements are stronger then downward movements
+	// So give downward movements more relative strength
+	// for the market to respond and give its input
+	if poolSizeChangeRatio < 1.0 {
+		maxFreshStakePerBlock := int64(s.params.MaxFreshStakePerBlock)
+		maxFreshStakePerWindow := maxFreshStakePerBlock * intervalSize
+		thisRatio := float64(maxFreshStakePerWindow) / float64(ticketsPerWindow)
+		relativeIntervals = relativeIntervals * thisRatio
+		sizeDiff := float64(prevPoolSizeAll) - float64(curPoolSizeAll)
+		poolSizeChangeRatio = (float64(prevPoolSizeAll) - (sizeDiff * thisRatio)) / float64(prevPoolSizeAll)
+	}
 
 	// Voila!
 	nextDiff := float64(curDiff) * math.Pow(poolSizeChangeRatio, relativeIntervals) * targetRatio
