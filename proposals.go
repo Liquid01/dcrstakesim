@@ -292,10 +292,45 @@ func (s *simulator) calcNextStakeDiffProposal1G() int64 {
 	targetPoolSizeAll := ticketsPerBlock * (ticketPoolSize + ticketMaturity)
 	targetRatio := float64(curPoolSizeAll) / float64(targetPoolSizeAll)
 
+	// derive ratio of purchase slots filled
+	maxFreshStakePerBlock := int64(s.params.MaxFreshStakePerBlock)
+	maxFreshStakePerWindow := maxFreshStakePerBlock * intervalSize
+	freshStakeLastWindow := curPoolSizeAll - prevPoolSizeAll
+	// steady is a consistent flow of tickets in and out
+	// mainnet steady is <0.25 is a drop, >0.25 is a rise
+	steadyFreshStakeRatio := float64(ticketsPerBlock) / float64(maxFreshStakePerBlock)
+	freshStakeRatio := (float64(freshStakeLastWindow) / float64(maxFreshStakePerWindow)) * (1.0 / steadyFreshStakeRatio)
+
+	// Upward price movements are stronger then downward movements.
+	// Add downward movements relative strength, for the market to respond and give its input.
+	if poolSizeChangeRatio < 1.0 {
+		buysPerVote := float64(maxFreshStakePerWindow) / float64(ticketsPerWindow)
+		sizeDiff := float64(prevPoolSizeAll - curPoolSizeAll)
+		poolSizeChangeRatio = (float64(prevPoolSizeAll) - (sizeDiff * buysPerVote)) / float64(prevPoolSizeAll)
+	}
+
+	// Protect pool size from going over target.
+	// Amplify targetRatio by intervals over pool target.
+	if targetRatio > 1.0 {
+		sizeDiff := float64(curPoolSizeAll - targetPoolSizeAll)
+		relativeIntervals := sizeDiff / float64(ticketsPerWindow)
+		targetRatio = (float64(targetPoolSizeAll) + (sizeDiff * relativeIntervals)) / float64(targetPoolSizeAll)
+	}
+
+	// Ramp up, optimize for more staked coins and better price discovery.
+	// Detect for below target pool size with pool size increasing.
+	// Amplify poolSizeChangeRatio by freshStakeRatio.
+	// With the poolSizeChangeRatio increasing, freshStakeRatio will naturally be over 1.
+	if curPoolSizeAll < targetPoolSizeAll-maxFreshStakePerWindow && poolSizeChangeRatio > 1.0 {
+		poolSizeDiff := float64(curPoolSizeAll - prevPoolSizeAll)
+		poolSizeChangeRatio = (float64(prevPoolSizeAll) + (poolSizeDiff * freshStakeRatio)) / float64(prevPoolSizeAll)
+		targetRatio = 1.0 // neutralize targetRatio
+	}
+
 	// Voila!
 	nextDiff := float64(curDiff) * poolSizeChangeRatio * targetRatio
 
-	// insure the pool gets fully populated
+	// Insure the pool gets fully populated.
 	maximumStakeDiff := int64(float64(s.tip.totalSupply) / float64(targetPoolSize))
 	if int64(nextDiff) > maximumStakeDiff {
 		if maximumStakeDiff < s.params.MinimumStakeDiff {
@@ -304,7 +339,7 @@ func (s *simulator) calcNextStakeDiffProposal1G() int64 {
 		return maximumStakeDiff
 	}
 
-	// hard coded minimum value
+	// Hard coded minimum value.
 	if int64(nextDiff) < s.params.MinimumStakeDiff {
 		return s.params.MinimumStakeDiff
 	}
