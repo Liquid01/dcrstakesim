@@ -218,8 +218,8 @@ func (s *simulator) calcPrevVWAP(prevNode *blockNode) int64 {
 		prevNode = prevNode.parent
 	}
 
-	// Return minimum ticket price if there are were not any ticket
-	// purchases at all in the entire period being examined.
+	// Return minimum ticket price if there were not any ticket purchases at
+	// all in the entire period being examined.
 	if totalTickets.Sign() == 0 {
 		return s.params.MinimumStakeDiff
 	}
@@ -283,28 +283,15 @@ func (s *simulator) demandFuncB(nextHeight int32, ticketPrice int64) float64 {
 	return demand
 }
 
-// demandFuncC alternate between demandFuncA and demandFuncB each window
+// demandFuncC returns a simulated demand (as a percentage of the number of
+// tickets to purchase within a given stake difficulty interval) based upon
+// alternating between demandFuncA and demandFuncB each interval.
 func (s *simulator) demandFuncC(nextHeight int32, ticketPrice int64) float64 {
-	window := int(float64(nextHeight) / float64(144)) // 144 should be param
-	if window%2 == 0 {
-		return s.demandFuncA(nextHeight, ticketPrice)
-	} else {
-		return s.demandFuncB(nextHeight, ticketPrice)
-	}
-}
-
-// demandFuncD
-func (s *simulator) demandFuncD(nextHeight int32, ticketPrice int64) float64 {
-	if nextHeight > 5000 {
-		return s.demandFuncB(nextHeight, ticketPrice)
-	} else {
+	interval := int64(nextHeight) / s.params.StakeDiffWindowSize
+	if interval%2 == 0 {
 		return s.demandFuncA(nextHeight, ticketPrice)
 	}
-}
-
-// demandFuncConst returns a constant demand
-func (s *simulator) demandFuncConst(nextHeight int32, ticketPrice int64) float64 {
-	return 1.0
+	return s.demandFuncB(nextHeight, ticketPrice)
 }
 
 // isInSurgeRange returns whether or not the provided height is within the range
@@ -418,9 +405,9 @@ func main() {
 		"Path to simulation CSV input data -- This overrides numblocks")
 	var numBlocks = flag.Uint64("numblocks", 100000, "Number of blocks to simulate")
 	var pfName = flag.String("pf", "current",
-		"Set the ticket price calculation function -- available options: [current, 1, 1E, 1F, 1G, 2, 3]")
+		"Set the ticket price calculation function -- available options: [current, 1, 2, 3, 4, 5]")
 	var ddfName = flag.String("ddf", "a",
-		"Set the demand distribution function -- available options: [a, b, c, d, const]")
+		"Set the demand distribution function -- available options: [a, b, c, full]")
 	var verbose = flag.Bool("verbose", false, "Print additional details about simulator state")
 	flag.Parse()
 
@@ -465,6 +452,12 @@ func main() {
 	case "3":
 		sim.nextTicketPriceFunc = sim.calcNextStakeDiffProposal3
 		pfResultsName = "Proposal 3"
+	case "4":
+		sim.nextTicketPriceFunc = sim.calcNextStakeDiffProposal4
+		pfResultsName = "Proposal 4"
+	case "5":
+		sim.nextTicketPriceFunc = sim.calcNextStakeDiffProposal5
+		pfResultsName = "Proposal 5"
 	default:
 		fmt.Printf("%q is not a valid ticket price func name\n",
 			*pfName)
@@ -487,13 +480,10 @@ func main() {
 		ddfResultsName = "b - Purchase based on estimated nominal yield"
 	case "c":
 		sim.demandFunc = sim.demandFuncC
-		ddfResultsName = "c - Alternative between A and B each window"
-	case "d":
-		sim.demandFunc = sim.demandFuncD
-		ddfResultsName = "d - A till block 5000 then use B"
-	case "const":
-		sim.demandFunc = sim.demandFuncConst
-		ddfResultsName = "const - Constant demand"
+		ddfResultsName = "c - Alternate between purchasing based solely on estimated nominal yield and including volume-weighted average price each interval"
+	case "full":
+		sim.demandFunc = func(int32, int64) float64 { return 1.0 }
+		ddfResultsName = "full - Purchase with 100% demand"
 	default:
 		fmt.Printf("%q is not a valid demand distribution func name\n",
 			*ddfName)
