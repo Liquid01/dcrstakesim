@@ -390,3 +390,111 @@ func (s *simulator) calcNextStakeDiffProposal6() int64 {
 
 	return price
 }
+
+// estimateSupply returns an estimate of the coin supply for the provided block
+// height.  This is primarily used in the stake difficulty algorithm and relies
+// on an estimate to simplify the necessary calculations.  The actual total
+// coin supply as of a given block height depends on many factors such as the
+// number of votes included in every prior block (not including all votes
+// reduces the subsidy) and whether or not any of the prior blocks have been
+// invalidated by stakeholders thereby removing the PoW subsidy for the them.
+func (s *simulator) estimateSupply(height int32) dcrutil.Amount {
+	if height <= 0 {
+		return 0
+	}
+
+	// Estimate the supply by calculating the full block subsidy for each
+	// reduction interval and multiplying it the number of blocks in the
+	// interval then adding the subsidy produced by number of blocks in the
+	// current interval.
+	supply := s.params.BlockOneSubsidy()
+	reductions := int64(height) / s.params.SubsidyReductionInterval
+	subsidy := s.params.BaseSubsidy
+	for i := int64(0); i < reductions; i++ {
+		supply += s.params.SubsidyReductionInterval * subsidy
+
+		subsidy *= s.params.MulSubsidy
+		subsidy /= s.params.DivSubsidy
+	}
+	supply += (int64(height) % s.params.SubsidyReductionInterval) * subsidy
+
+	// Blocks 0 and 1 have special subsidy amounts that have already been
+	// added above, so remove what their subsidies would have normally been
+	// which were also added above.
+	supply -= s.params.BaseSubsidy * 2
+
+	return dcrutil.Amount(supply)
+}
+
+// calcNextStakeDiffProposal7 returns the required stake difficulty (aka ticket
+// price) for the block after the current tip block the simulator is associated
+// with using the algorithm proposed by raedah, jy-p, and davecgh in
+// https://github.com/decred/dcrd/issues/584
+func (s *simulator) calcNextStakeDiffProposal7() int64 {
+	// Stake difficulty before any tickets could possibly be purchased is
+	// the minimum value.
+	nextHeight := int32(0)
+	if s.tip != nil {
+		nextHeight = s.tip.height + 1
+	}
+	stakeDiffStartHeight := int32(s.params.CoinbaseMaturity) + 1
+	if nextHeight < stakeDiffStartHeight {
+		return s.params.MinimumStakeDiff
+	}
+
+	// Return the previous block's difficulty requirements if the next block
+	// is not at a difficulty retarget interval.
+	intervalSize := s.params.StakeDiffWindowSize
+	curDiff := s.tip.ticketPrice
+	if int64(nextHeight)%intervalSize != 0 {
+		return curDiff
+	}
+
+	// Attempt to get the pool size from the previous retarget interval.
+	var prevPoolSize int64
+	prevRetargetHeight := nextHeight - int32(intervalSize)
+	node := s.ancestorNode(s.tip, prevRetargetHeight, nil)
+	if node != nil {
+		prevPoolSize = int64(node.poolSize)
+	}
+
+	// Return the existing ticket price for the first few intervals.
+	if prevPoolSize == 0 {
+		return curDiff
+	}
+
+	// Get the immature ticket count from the previous interval.
+	var prevImmatureTickets int64
+	ticketMaturity := int64(s.params.TicketMaturity)
+	s.ancestorNode(node, node.height-int32(ticketMaturity), func(n *blockNode) {
+		prevImmatureTickets += int64(len(n.ticketsAdded))
+	})
+
+	// Derive ratio of percent change in pool size.
+	immatureTickets := int64(len(s.immatureTickets))
+	curPoolSize := int64(s.tip.poolSize)
+	curPoolSizeAll := curPoolSize + immatureTickets
+	prevPoolSizeAll := prevPoolSize + prevImmatureTickets
+	poolSizeChangeRatio := float64(curPoolSizeAll) / float64(prevPoolSizeAll)
+
+	// Derive ratio of percent of target pool size.
+	ticketsPerBlock := int64(s.params.TicketsPerBlock)
+	ticketPoolSize := int64(s.params.TicketPoolSize)
+	targetPoolSizeAll := ticketsPerBlock * (ticketPoolSize + ticketMaturity)
+	targetRatio := float64(curPoolSizeAll) / float64(targetPoolSizeAll)
+
+	// Voila!
+	nextDiff := int64(float64(curDiff) * poolSizeChangeRatio * targetRatio)
+
+	// Limit the new stake difficulty between the minimum allowed stake
+	// difficulty and a maximum value that is relative to the total supply.
+	estimatedSupply := s.estimateSupply(nextHeight)
+	maximumStakeDiff := int64(float64(estimatedSupply) / float64(ticketPoolSize))
+	if nextDiff > maximumStakeDiff {
+		nextDiff = maximumStakeDiff
+	}
+	if nextDiff < s.params.MinimumStakeDiff {
+		nextDiff = s.params.MinimumStakeDiff
+	}
+	return nextDiff
+}
