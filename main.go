@@ -283,13 +283,13 @@ func (s *simulator) demandFuncB(nextHeight int32, ticketPrice int64) float64 {
 	return demand
 }
 
-// demandFuncC alternate between demandFuncA and demandFuncB each block
+// demandFuncC alternate between demandFuncA and demandFuncB each window
 func (s *simulator) demandFuncC(nextHeight int32, ticketPrice int64) float64 {
-	freq := int32(50)
-	if nextHeight%freq == 0 {
-		return s.demandFuncB(nextHeight, ticketPrice)
-	} else {
+	window := int(float64(nextHeight) / float64(144)) // 144 should be param
+	if window%2 == 0 {
 		return s.demandFuncA(nextHeight, ticketPrice)
+	} else {
+		return s.demandFuncB(nextHeight, ticketPrice)
 	}
 }
 
@@ -484,7 +484,7 @@ func main() {
 		ddfResultsName = "b - Purchase based on estimated nominal yield"
 	case "c":
 		sim.demandFunc = sim.demandFuncC
-		ddfResultsName = "c - Alternative between A and B each block"
+		ddfResultsName = "c - Alternative between A and B each window"
 	case "d":
 		sim.demandFunc = sim.demandFuncD
 		ddfResultsName = "d - A till block 5000 then use B"
