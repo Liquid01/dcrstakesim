@@ -294,6 +294,17 @@ func (s *simulator) demandFuncC(nextHeight int32, ticketPrice int64) float64 {
 	return s.demandFuncB(nextHeight, ticketPrice)
 }
 
+// demandFuncD returns a simulated demand (as a percentage of the number of
+// tickets to purchase within a given stake difficulty interval) based upon
+// alternating between full demand and no demand each interval.
+func (s *simulator) demandFuncD(nextHeight int32, ticketPrice int64) float64 {
+	interval := int64(nextHeight) / (s.params.StakeDiffWindowSize * 4)
+	if interval%2 == 0 {
+		return 0.0
+	}
+	return 1.0
+}
+
 // isInSurgeRange returns whether or not the provided height is within the range
 // of blocks defined by the surge up and down heights.
 func isInSurgeRange(height int32) bool {
@@ -446,6 +457,9 @@ func main() {
 	case "1G":
 		sim.nextTicketPriceFunc = sim.calcNextStakeDiffProposal1G
 		pfResultsName = "Proposal 1G"
+	case "1H":
+		sim.nextTicketPriceFunc = sim.calcNextStakeDiffProposal1H
+		pfResultsName = "Proposal 1H"
 	case "2":
 		sim.nextTicketPriceFunc = sim.calcNextStakeDiffProposal2
 		pfResultsName = "Proposal 2"
@@ -481,6 +495,9 @@ func main() {
 	case "c":
 		sim.demandFunc = sim.demandFuncC
 		ddfResultsName = "c - Alternate between purchasing based solely on estimated nominal yield and including volume-weighted average price each interval"
+	case "d":
+		sim.demandFunc = sim.demandFuncD
+		ddfResultsName = "d - Alternate between full demand and no demand"
 	case "full":
 		sim.demandFunc = func(int32, int64) float64 { return 1.0 }
 		ddfResultsName = "full - Purchase with 100% demand"
