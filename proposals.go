@@ -406,32 +406,33 @@ func (s *simulator) calcNextStakeDiffProposal1H() int64 {
 	targetPoolSizeAll := ticketsPerBlock * (ticketPoolSize + ticketMaturity)
 	targetRatio := float64(curPoolSizeAll) / float64(targetPoolSizeAll)
 
+	var relativeMultiplier float64
+
 	// Best
-	poolSizeChangeRatio := float64(curPoolSizeAll) / float64(prevPoolSizeAll)
-	nextDiff := float64(curDiff) * poolSizeChangeRatio * targetRatio
+	//poolSizeChangeRatio := float64(curPoolSizeAll) / float64(prevPoolSizeAll)
 	ticketsPerWindow := ticketsPerBlock * intervalSize
 	maxFreshStakePerBlock := int64(s.params.MaxFreshStakePerBlock)
-	if poolSizeChangeRatio < 1.0 {
+	//if poolSizeChangeRatio < 1.0 {
+        if curPoolSizeAll < prevPoolSizeAll {
 		// Upward price movements are stronger then downward movements.
 		// Add downward movements relative strength, for the market to respond and give its input.
 		maxFreshStakePerWindow := maxFreshStakePerBlock * intervalSize
 		buysPerVote := float64(maxFreshStakePerWindow) / float64(ticketsPerWindow)
 		sizeDiff := float64(prevPoolSizeAll) - float64(curPoolSizeAll)
-		tempPoolSizeChangeRatio := (float64(prevPoolSizeAll) - (sizeDiff * buysPerVote)) / float64(prevPoolSizeAll)
-		nextDiff = float64(curDiff) * tempPoolSizeChangeRatio * targetRatio
+		relativeMultiplier = (float64(prevPoolSizeAll) - (sizeDiff * buysPerVote)) / float64(prevPoolSizeAll)
 	} else {
 		sizeDiff := float64(curPoolSizeAll - prevPoolSizeAll)
 		relativeIntervals := sizeDiff / float64(intervalSize)
-		tempPoolSizeChangeRatio := (float64(prevPoolSizeAll) + (sizeDiff * relativeIntervals)) / float64(prevPoolSizeAll)
-		nextDiff = float64(curDiff) * tempPoolSizeChangeRatio * targetRatio
+		relativeMultiplier = (float64(prevPoolSizeAll) + (sizeDiff * relativeIntervals)) / float64(prevPoolSizeAll)
 	}
+	nextDiff := float64(curDiff) * relativeMultiplier * targetRatio
 
 	/*
 	// becomes wavier
 	//sizeDiff := math.Abs(float64(curPoolSizeAll) - float64(prevPoolSizeAll))
 	poolSizeChangeRatio := float64(curPoolSizeAll) / float64(prevPoolSizeAll)
 	var relativeMultiplier float64
-	if poolSizeChangeRatio < 1.0 {
+        if curPoolSizeAll < prevPoolSizeAll {
 	    sizeDiff := float64(prevPoolSizeAll) - float64(curPoolSizeAll)
 	    relativeIntervals := sizeDiff / float64(intervalSize)
 	    maxFreshStakePerBlock := int64(s.params.MaxFreshStakePerBlock)
