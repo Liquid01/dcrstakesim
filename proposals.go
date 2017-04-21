@@ -390,13 +390,13 @@ func (s *simulator) calcNextStakeDiffProposal1H() int64 {
 		return curDiff
 	}
 
-	// Derive ratio of percent change in pool size.
+	// Pool size amounts.
 	immatureTickets := int64(len(s.immatureTickets))
 	curPoolSize := int64(s.tip.poolSize)
 	curPoolSizeAll := curPoolSize + immatureTickets
 	prevPoolSizeAll := prevPoolSize + prevImmatureTickets
 
-	// Derive ratio of percent of target pool size.
+	// Ratio of the current pool size to the desired target pool size.
 	ticketsPerBlock := int64(s.params.TicketsPerBlock)
 	ticketPoolSize := int64(s.params.TicketPoolSize)
 	targetPoolSize := ticketsPerBlock * ticketPoolSize
@@ -408,13 +408,19 @@ func (s *simulator) calcNextStakeDiffProposal1H() int64 {
 	// The average pool size change per block.
 	avgPoolSizeChange := poolSizeChange / float64(intervalSize)
 
-	// Create the relative change booster.
-	// avgPoolSizeChange is being used as the multiplier of relative speed.
+	// Create the relative pool size change booster.
+	// Take account of how many tickets were added or removed from the pool
+	// (including immature tickets) since the last price adjustment interval.
 	var relativeBoost float64
+	maxFreshStakePerBlock := int64(s.params.MaxFreshStakePerBlock)
+	stakePerVote := float64(maxFreshStakePerBlock) / float64(ticketsPerBlock)
+	boostFactor := avgPoolSizeChange * stakePerVote
 	if curPoolSizeAll < prevPoolSizeAll {
-		relativeBoost = (float64(prevPoolSizeAll) - (poolSizeChange * avgPoolSizeChange)) / float64(prevPoolSizeAll)
+		// trending down
+		relativeBoost = (float64(prevPoolSizeAll) - (poolSizeChange * boostFactor)) / float64(prevPoolSizeAll)
 	} else {
-		relativeBoost = (float64(prevPoolSizeAll) + (poolSizeChange * avgPoolSizeChange)) / float64(prevPoolSizeAll)
+		// trending up or steady
+		relativeBoost = (float64(prevPoolSizeAll) + (poolSizeChange * boostFactor)) / float64(prevPoolSizeAll)
 	}
 
 	// Voila!
