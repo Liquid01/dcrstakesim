@@ -394,24 +394,22 @@ func (s *simulator) calcNextStakeDiffProposal1H() int64 {
 	}
 
 	// derive ratio of percent change in pool size
-	// max possible poolSizeChangeRatio is 2
 	immatureTickets := int64(len(s.immatureTickets))
 	curPoolSize := int64(s.tip.poolSize)
 	curPoolSizeAll := curPoolSize + immatureTickets
 	prevPoolSizeAll := prevPoolSize + prevImmatureTickets
-	poolSizeChangeRatio := float64(curPoolSizeAll) / float64(prevPoolSizeAll)
 
 	// derive ratio of percent of target pool size
 	ticketsPerBlock := int64(s.params.TicketsPerBlock)
-	ticketsPerWindow := ticketsPerBlock * intervalSize
 	ticketPoolSize := int64(s.params.TicketPoolSize)
 	targetPoolSize := ticketsPerBlock * ticketPoolSize
 	targetPoolSizeAll := ticketsPerBlock * (ticketPoolSize + ticketMaturity)
 	targetRatio := float64(curPoolSizeAll) / float64(targetPoolSizeAll)
 
-	// Voila!
+	// Best
+	poolSizeChangeRatio := float64(curPoolSizeAll) / float64(prevPoolSizeAll)
 	nextDiff := float64(curDiff) * poolSizeChangeRatio * targetRatio
-
+	ticketsPerWindow := ticketsPerBlock * intervalSize
 	maxFreshStakePerBlock := int64(s.params.MaxFreshStakePerBlock)
 	if poolSizeChangeRatio < 1.0 {
 		// Upward price movements are stronger then downward movements.
@@ -428,6 +426,40 @@ func (s *simulator) calcNextStakeDiffProposal1H() int64 {
 		nextDiff = float64(curDiff) * tempPoolSizeChangeRatio * targetRatio
 	}
 
+	/*
+	// becomes wavier
+	//sizeDiff := math.Abs(float64(curPoolSizeAll) - float64(prevPoolSizeAll))
+	poolSizeChangeRatio := float64(curPoolSizeAll) / float64(prevPoolSizeAll)
+	var relativeMultiplier float64
+	if poolSizeChangeRatio < 1.0 {
+	    sizeDiff := float64(prevPoolSizeAll) - float64(curPoolSizeAll)
+	    relativeIntervals := sizeDiff / float64(intervalSize)
+	    maxFreshStakePerBlock := int64(s.params.MaxFreshStakePerBlock)
+	    votesPerBuy := float64(ticketsPerBlock) / float64(maxFreshStakePerBlock)
+	    //relativeIntervals = relativeIntervals * votesPerBuy
+	    relativeMultiplier = (float64(prevPoolSizeAll) + (sizeDiff * relativeIntervals * votesPerBuy)) / float64(prevPoolSizeAll)
+	} else {
+	    sizeDiff := float64(curPoolSizeAll) - float64(prevPoolSizeAll)
+	    relativeIntervals := sizeDiff / float64(intervalSize)
+	    relativeMultiplier = (float64(prevPoolSizeAll) + (sizeDiff * relativeIntervals)) / float64(prevPoolSizeAll)
+	}
+	nextDiff := float64(curDiff) * relativeMultiplier * targetRatio
+	*/
+
+	/*
+        // continous waves
+        poolShift := math.Abs(float64(curPoolSizeAll - prevPoolSizeAll))
+        maxFreshStakePerBlock := int64(s.params.MaxFreshStakePerBlock)
+        var relativeIntervals float64
+        if curPoolSizeAll < prevPoolSizeAll {
+                relativeIntervals = float64(maxFreshStakePerBlock) / float64(ticketsPerBlock)
+        } else {
+                relativeIntervals = poolShift / float64(intervalSize)
+        }
+        relativeMultiplier := (float64(prevPoolSizeAll) + (poolShift * relativeIntervals)) / float64(prevPoolSizeAll)
+        nextDiff := float64(curDiff) * relativeMultiplier * targetRatio
+	*/
+
 	// ramp up price during initial pool population
 	maximumStakeDiff := int64(float64(s.tip.totalSupply) / float64(targetPoolSize))
 	if int64(nextDiff) > maximumStakeDiff && targetRatio < 1.0 {
@@ -442,7 +474,7 @@ func (s *simulator) calcNextStakeDiffProposal1H() int64 {
 		return maximumStakeDiff
 	}
 
-	// Hard coded minimum value.
+	// hard coded minimum value
 	if int64(nextDiff) < s.params.MinimumStakeDiff {
 		return s.params.MinimumStakeDiff
 	}
