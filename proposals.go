@@ -403,14 +403,16 @@ func (s *simulator) calcNextStakeDiffProposal1H() int64 {
 	targetPoolSizeAll := ticketsPerBlock * (ticketPoolSize + ticketMaturity)
 	targetRatio := float64(curPoolSizeAll) / float64(targetPoolSizeAll)
 
+	// magic sauce here
 	maxFreshStakePerBlock := int64(s.params.MaxFreshStakePerBlock)
 	poolShift := math.Abs(float64(curPoolSizeAll - prevPoolSizeAll))
+	relativeIntervals := poolShift / float64(intervalSize)
 	var relativeMultiplier float64
 	if curPoolSizeAll < prevPoolSizeAll {
-		relativeIntervals := float64(maxFreshStakePerBlock) / float64(ticketsPerBlock)
+		stakePerVote := float64(maxFreshStakePerBlock) / float64(ticketsPerBlock)
+		relativeIntervals = relativeIntervals * stakePerVote
 		relativeMultiplier = (float64(prevPoolSizeAll) - (poolShift * relativeIntervals)) / float64(prevPoolSizeAll)
 	} else {
-		relativeIntervals := poolShift / float64(intervalSize)
 		relativeMultiplier = (float64(prevPoolSizeAll) + (poolShift * relativeIntervals)) / float64(prevPoolSizeAll)
 	}
 
