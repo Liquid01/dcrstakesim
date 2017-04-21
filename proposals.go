@@ -378,11 +378,6 @@ func (s *simulator) calcNextStakeDiffProposal1H() int64 {
 		prevPoolSize = int64(node.poolSize)
 	}
 
-	// Return the existing ticket price for the first interval.
-	if prevPoolSize == 0 {
-		return curDiff
-	}
-
 	// get the immature ticket count from the previous window
 	// note, make sure we have no off-by-ones here
 	var prevImmatureTickets int64
@@ -392,6 +387,11 @@ func (s *simulator) calcNextStakeDiffProposal1H() int64 {
 	s.ancestorNode(relevantNode, relevantHeight-int32(ticketMaturity), func(n *blockNode) {
 		prevImmatureTickets += int64(len(n.ticketsAdded))
 	})
+
+	// Return the existing ticket price for the first interval.
+	if prevPoolSize+prevImmatureTickets == 0 {
+		return curDiff
+	}
 
 	// derive ratio of percent change in pool size
 	// max possible poolSizeChangeRatio is 2
@@ -412,19 +412,18 @@ func (s *simulator) calcNextStakeDiffProposal1H() int64 {
 	// Voila!
 	nextDiff := float64(curDiff) * poolSizeChangeRatio * targetRatio
 
+	maxFreshStakePerBlock := int64(s.params.MaxFreshStakePerBlock)
 	if poolSizeChangeRatio < 1.0 {
 		// Upward price movements are stronger then downward movements.
 		// Add downward movements relative strength, for the market to respond and give its input.
-		maxFreshStakePerBlock := int64(s.params.MaxFreshStakePerBlock)
 		maxFreshStakePerWindow := maxFreshStakePerBlock * intervalSize
 		buysPerVote := float64(maxFreshStakePerWindow) / float64(ticketsPerWindow)
 		sizeDiff := float64(prevPoolSizeAll) - float64(curPoolSizeAll)
 		tempPoolSizeChangeRatio := (float64(prevPoolSizeAll) - (sizeDiff * buysPerVote)) / float64(prevPoolSizeAll)
 		nextDiff = float64(curDiff) * tempPoolSizeChangeRatio * targetRatio
 	} else {
-		// Amplify targetRatio by intervals outside of pool target.
 		sizeDiff := float64(curPoolSizeAll - prevPoolSizeAll)
-		relativeIntervals := sizeDiff / float64(ticketsPerWindow/4)
+		relativeIntervals := sizeDiff / float64(intervalSize)
 		tempPoolSizeChangeRatio := (float64(prevPoolSizeAll) + (sizeDiff * relativeIntervals)) / float64(prevPoolSizeAll)
 		nextDiff = float64(curDiff) * tempPoolSizeChangeRatio * targetRatio
 	}
