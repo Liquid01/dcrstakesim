@@ -378,13 +378,10 @@ func (s *simulator) calcNextStakeDiffProposal1H() int64 {
 		prevPoolSize = int64(node.poolSize)
 	}
 
-	// get the immature ticket count from the previous window
-	// note, make sure we have no off-by-ones here
+	// Get the immature ticket count from the previous interval.
 	var prevImmatureTickets int64
 	ticketMaturity := int64(s.params.TicketMaturity)
-	relevantHeight := s.tip.height - int32(intervalSize) // or nextHeight?
-	relevantNode := s.ancestorNode(s.tip, relevantHeight, nil)
-	s.ancestorNode(relevantNode, relevantHeight-int32(ticketMaturity), func(n *blockNode) {
+	s.ancestorNode(node, node.height-int32(ticketMaturity), func(n *blockNode) {
 		prevImmatureTickets += int64(len(n.ticketsAdded))
 	})
 
@@ -406,60 +403,27 @@ func (s *simulator) calcNextStakeDiffProposal1H() int64 {
 	targetPoolSizeAll := ticketsPerBlock * (ticketPoolSize + ticketMaturity)
 	targetRatio := float64(curPoolSizeAll) / float64(targetPoolSizeAll)
 
-	var relativeMultiplier float64
-
-	// Best
-	//poolSizeChangeRatio := float64(curPoolSizeAll) / float64(prevPoolSizeAll)
-	ticketsPerWindow := ticketsPerBlock * intervalSize
 	maxFreshStakePerBlock := int64(s.params.MaxFreshStakePerBlock)
-	//if poolSizeChangeRatio < 1.0 {
-        if curPoolSizeAll < prevPoolSizeAll {
-		// Upward price movements are stronger then downward movements.
-		// Add downward movements relative strength, for the market to respond and give its input.
-		maxFreshStakePerWindow := maxFreshStakePerBlock * intervalSize
-		buysPerVote := float64(maxFreshStakePerWindow) / float64(ticketsPerWindow)
-		sizeDiff := float64(prevPoolSizeAll) - float64(curPoolSizeAll)
-		relativeMultiplier = (float64(prevPoolSizeAll) - (sizeDiff * buysPerVote)) / float64(prevPoolSizeAll)
-	} else {
-		sizeDiff := float64(curPoolSizeAll - prevPoolSizeAll)
-		relativeIntervals := sizeDiff / float64(intervalSize)
-		relativeMultiplier = (float64(prevPoolSizeAll) + (sizeDiff * relativeIntervals)) / float64(prevPoolSizeAll)
-	}
-	nextDiff := float64(curDiff) * relativeMultiplier * targetRatio
-
-	/*
-	// becomes wavier
-	//sizeDiff := math.Abs(float64(curPoolSizeAll) - float64(prevPoolSizeAll))
-	poolSizeChangeRatio := float64(curPoolSizeAll) / float64(prevPoolSizeAll)
+	poolShift := math.Abs(float64(curPoolSizeAll - prevPoolSizeAll))
+	relativeIntervals := poolShift / float64(intervalSize)
 	var relativeMultiplier float64
-        if curPoolSizeAll < prevPoolSizeAll {
-	    sizeDiff := float64(prevPoolSizeAll) - float64(curPoolSizeAll)
-	    relativeIntervals := sizeDiff / float64(intervalSize)
-	    maxFreshStakePerBlock := int64(s.params.MaxFreshStakePerBlock)
-	    votesPerBuy := float64(ticketsPerBlock) / float64(maxFreshStakePerBlock)
-	    //relativeIntervals = relativeIntervals * votesPerBuy
-	    relativeMultiplier = (float64(prevPoolSizeAll) + (sizeDiff * relativeIntervals * votesPerBuy)) / float64(prevPoolSizeAll)
-	} else {
-	    sizeDiff := float64(curPoolSizeAll) - float64(prevPoolSizeAll)
-	    relativeIntervals := sizeDiff / float64(intervalSize)
-	    relativeMultiplier = (float64(prevPoolSizeAll) + (sizeDiff * relativeIntervals)) / float64(prevPoolSizeAll)
-	}
-	nextDiff := float64(curDiff) * relativeMultiplier * targetRatio
-	*/
+	if curPoolSizeAll < prevPoolSizeAll {
+		// works well
+		relativeIntervals := float64(maxFreshStakePerBlock) / float64(ticketsPerBlock)
+		// slightly bigger?
+		//buysPerVote := float64(maxFreshStakePerBlock) / float64(ticketsPerBlock)
+		//relativeIntervals = relativeIntervals * buysPerVote
 
-	/*
-        // continous waves
-        poolShift := math.Abs(float64(curPoolSizeAll - prevPoolSizeAll))
-        maxFreshStakePerBlock := int64(s.params.MaxFreshStakePerBlock)
-        var relativeIntervals float64
-        if curPoolSizeAll < prevPoolSizeAll {
-                relativeIntervals = float64(maxFreshStakePerBlock) / float64(ticketsPerBlock)
-        } else {
-                relativeIntervals = poolShift / float64(intervalSize)
-        }
-        relativeMultiplier := (float64(prevPoolSizeAll) + (poolShift * relativeIntervals)) / float64(prevPoolSizeAll)
-        nextDiff := float64(curDiff) * relativeMultiplier * targetRatio
-	*/
+		// flat
+		relativeMultiplier = (float64(prevPoolSizeAll) - (poolShift * relativeIntervals)) / float64(prevPoolSizeAll)
+		// waves
+		//relativeMultiplier = (float64(prevPoolSizeAll) + (poolShift * relativeIntervals)) / float64(prevPoolSizeAll)
+	} else {
+		relativeMultiplier = (float64(prevPoolSizeAll) + (poolShift * relativeIntervals)) / float64(prevPoolSizeAll)
+	}
+
+	// Voila!
+	nextDiff := float64(curDiff) * relativeMultiplier * targetRatio
 
 	// ramp up price during initial pool population
 	maximumStakeDiff := int64(float64(s.tip.totalSupply) / float64(targetPoolSize))
