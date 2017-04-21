@@ -5,8 +5,6 @@
 package main
 
 import (
-	"math"
-
 	"github.com/davecgh/dcrstakesim/internal/tickettreap"
 	"github.com/decred/dcrutil"
 	"math"
@@ -407,20 +405,12 @@ func (s *simulator) calcNextStakeDiffProposal1H() int64 {
 
 	maxFreshStakePerBlock := int64(s.params.MaxFreshStakePerBlock)
 	poolShift := math.Abs(float64(curPoolSizeAll - prevPoolSizeAll))
-	relativeIntervals := poolShift / float64(intervalSize)
 	var relativeMultiplier float64
 	if curPoolSizeAll < prevPoolSizeAll {
-		// works well
 		relativeIntervals := float64(maxFreshStakePerBlock) / float64(ticketsPerBlock)
-		// slightly bigger?
-		//buysPerVote := float64(maxFreshStakePerBlock) / float64(ticketsPerBlock)
-		//relativeIntervals = relativeIntervals * buysPerVote
-
-		// flat
 		relativeMultiplier = (float64(prevPoolSizeAll) - (poolShift * relativeIntervals)) / float64(prevPoolSizeAll)
-		// waves
-		//relativeMultiplier = (float64(prevPoolSizeAll) + (poolShift * relativeIntervals)) / float64(prevPoolSizeAll)
 	} else {
+		relativeIntervals := poolShift / float64(intervalSize)
 		relativeMultiplier = (float64(prevPoolSizeAll) + (poolShift * relativeIntervals)) / float64(prevPoolSizeAll)
 	}
 
