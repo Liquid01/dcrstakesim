@@ -349,7 +349,7 @@ func (s *simulator) calcNextStakeDiffProposal1G() int64 {
 	return int64(nextDiff)
 }
 
-// the algorithm proposed by raedah (again)
+// The algorithm proposed by raedah (v4)
 func (s *simulator) calcNextStakeDiffProposal1H() int64 {
 	// Stake difficulty before any tickets could possibly be purchased is
 	// the minimum value.
@@ -390,42 +390,45 @@ func (s *simulator) calcNextStakeDiffProposal1H() int64 {
 		return curDiff
 	}
 
-	// derive ratio of percent change in pool size
+	// Derive ratio of percent change in pool size.
 	immatureTickets := int64(len(s.immatureTickets))
 	curPoolSize := int64(s.tip.poolSize)
 	curPoolSizeAll := curPoolSize + immatureTickets
 	prevPoolSizeAll := prevPoolSize + prevImmatureTickets
 
-	// derive ratio of percent of target pool size
+	// Derive ratio of percent of target pool size.
 	ticketsPerBlock := int64(s.params.TicketsPerBlock)
 	ticketPoolSize := int64(s.params.TicketPoolSize)
 	targetPoolSize := ticketsPerBlock * ticketPoolSize
 	targetPoolSizeAll := ticketsPerBlock * (ticketPoolSize + ticketMaturity)
 	targetRatio := float64(curPoolSizeAll) / float64(targetPoolSizeAll)
 
-	// magic sauce here
-	maxFreshStakePerBlock := int64(s.params.MaxFreshStakePerBlock)
-	poolShift := math.Abs(float64(curPoolSizeAll - prevPoolSizeAll))
-	relativeIntervals := poolShift / float64(intervalSize)
-	var relativeMultiplier float64
+	// The change in the pool size during the last window.
+	poolSizeChange := math.Abs(float64(curPoolSizeAll - prevPoolSizeAll))
+	// The average pool size change per block.
+	avgPoolSizeChange := poolSizeChange / float64(intervalSize)
+
+	// Create the relative change booster.
+	// avgPoolSizeChange is being used as the multiplier of relative speed.
+	var relativeBoost float64
 	if curPoolSizeAll < prevPoolSizeAll {
-		stakePerVote := float64(maxFreshStakePerBlock) / float64(ticketsPerBlock)
-		relativeIntervals = relativeIntervals * stakePerVote
-		relativeMultiplier = (float64(prevPoolSizeAll) - (poolShift * relativeIntervals)) / float64(prevPoolSizeAll)
+		relativeBoost = (float64(prevPoolSizeAll) - (poolSizeChange * avgPoolSizeChange)) / float64(prevPoolSizeAll)
 	} else {
-		relativeMultiplier = (float64(prevPoolSizeAll) + (poolShift * relativeIntervals)) / float64(prevPoolSizeAll)
+		relativeBoost = (float64(prevPoolSizeAll) + (poolSizeChange * avgPoolSizeChange)) / float64(prevPoolSizeAll)
 	}
 
 	// Voila!
-	nextDiff := float64(curDiff) * relativeMultiplier * targetRatio
+	nextDiff := float64(curDiff) * relativeBoost * targetRatio
 
-	// ramp up price during initial pool population
+	// Ramp up price during initial pool population.
 	maximumStakeDiff := int64(float64(s.tip.totalSupply) / float64(targetPoolSize))
 	if int64(nextDiff) > maximumStakeDiff && targetRatio < 1.0 {
 		nextDiff = float64(maximumStakeDiff) * targetRatio
 	}
 
-	// optional
+	// Optional, keep the upper bound within a set max price.
+	// Trades off pool size spike, with insuring the pool gets fully populated.
+	// Also keeps the chart scale more readable.
 	if int64(nextDiff) > maximumStakeDiff {
 		if maximumStakeDiff < s.params.MinimumStakeDiff {
 			return s.params.MinimumStakeDiff
@@ -433,7 +436,7 @@ func (s *simulator) calcNextStakeDiffProposal1H() int64 {
 		return maximumStakeDiff
 	}
 
-	// hard coded minimum value
+	// Hard coded minimum value.
 	if int64(nextDiff) < s.params.MinimumStakeDiff {
 		return s.params.MinimumStakeDiff
 	}
