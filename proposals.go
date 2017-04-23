@@ -406,15 +406,12 @@ func (s *simulator) calcNextStakeDiffProposal1H() int64 {
 	// The change in the pool size during the last window.
 	poolSizeChange := math.Abs(float64(curPoolSizeAll - prevPoolSizeAll))
 	// The average pool size change per block.
-	avgPoolSizeChange := poolSizeChange / float64(intervalSize)
+	poolSizeChangePerBlock := poolSizeChange / float64(intervalSize)
 
-	// Create the relative pool size change booster.
-	// Take account of how many tickets were added or removed from the pool
-	// (including immature tickets) since the last price adjustment interval.
+	// Boost price movements using the pool size change.
 	var relativeBoost float64
-	maxFreshStakePerBlock := int64(s.params.MaxFreshStakePerBlock)
-	stakePerVote := float64(maxFreshStakePerBlock) / float64(ticketsPerBlock)
-	boostFactor := avgPoolSizeChange * stakePerVote
+	// poolSizeChangePerBlock is used as the multiplier, 0-20 on mainnet
+	boostFactor := poolSizeChangePerBlock
 	if curPoolSizeAll < prevPoolSizeAll {
 		// trending down
 		relativeBoost = (float64(prevPoolSizeAll) - (poolSizeChange * boostFactor)) / float64(prevPoolSizeAll)
@@ -435,6 +432,147 @@ func (s *simulator) calcNextStakeDiffProposal1H() int64 {
 	// Optional, keep the upper bound within a set max price.
 	// Trades off pool size spike, with insuring the pool gets fully populated.
 	// Also keeps the chart scale more readable.
+	if int64(nextDiff) > maximumStakeDiff {
+		if maximumStakeDiff < s.params.MinimumStakeDiff {
+			return s.params.MinimumStakeDiff
+		}
+		return maximumStakeDiff
+	}
+
+	// Hard coded minimum value.
+	if int64(nextDiff) < s.params.MinimumStakeDiff {
+		return s.params.MinimumStakeDiff
+	}
+
+	return int64(nextDiff)
+}
+
+// The algorithm proposed by raedah (v5)
+func (s *simulator) calcNextStakeDiffProposal1R() int64 {
+	// Stake difficulty before any tickets could possibly be purchased is
+	// the minimum value.
+	nextHeight := int32(0)
+	if s.tip != nil {
+		nextHeight = s.tip.height + 1
+	}
+	stakeDiffStartHeight := int32(s.params.CoinbaseMaturity) + 1
+	if nextHeight < stakeDiffStartHeight {
+		return s.params.MinimumStakeDiff
+	}
+
+	// Return the previous block's difficulty requirements if the next block
+	// is not at a difficulty retarget interval.
+	intervalSize := s.params.StakeDiffWindowSize
+	curDiff := s.tip.ticketPrice
+	if int64(nextHeight)%intervalSize != 0 {
+		return curDiff
+	}
+
+	// Attempt to get the pool size from the previous retarget interval.
+	var prevPoolSize int64
+	prevRetargetHeight := nextHeight - int32(intervalSize)
+	node := s.ancestorNode(s.tip, prevRetargetHeight, nil)
+	if node != nil {
+		prevPoolSize = int64(node.poolSize)
+	}
+
+	// Get the immature ticket count from the previous interval.
+	var prevImmatureTickets int64
+	ticketMaturity := int64(s.params.TicketMaturity)
+	s.ancestorNode(node, node.height-int32(ticketMaturity), func(n *blockNode) {
+		prevImmatureTickets += int64(len(n.ticketsAdded))
+	})
+
+	// Return the existing ticket price for the first interval.
+	if prevPoolSize+prevImmatureTickets == 0 {
+		return curDiff
+	}
+
+	// Pool size amounts.
+	immatureTickets := int64(len(s.immatureTickets))
+	curPoolSize := int64(s.tip.poolSize)
+	curPoolSizeAll := curPoolSize + immatureTickets
+	prevPoolSizeAll := prevPoolSize + prevImmatureTickets
+	poolSizeChangeRatio := float64(curPoolSizeAll) / float64(prevPoolSizeAll)
+
+	// Ratio of the current pool size to the desired target pool size.
+	ticketsPerBlock := int64(s.params.TicketsPerBlock)
+	ticketPoolSize := int64(s.params.TicketPoolSize)
+	//targetPoolSize := ticketsPerBlock * ticketPoolSize
+	targetPoolSizeAll := ticketsPerBlock * (ticketPoolSize + ticketMaturity)
+	targetRatio := float64(curPoolSizeAll) / float64(targetPoolSizeAll)
+
+	// The change in the pool size during the last window.
+	poolSizeChange := math.Abs(float64(curPoolSizeAll - prevPoolSizeAll))
+	poolSizeChangePerBlock := poolSizeChange / float64(intervalSize)
+
+	// Boost price movements using the pool size change.
+	var relativeBoost float64
+	// poolSizeChangePerBlock is used as the multiplier, 0-20 on mainnet
+	boostFactor := poolSizeChangePerBlock
+	if curPoolSizeAll < prevPoolSizeAll {
+		// trending down
+		relativeBoost = (float64(prevPoolSizeAll) - (poolSizeChange * boostFactor)) / float64(prevPoolSizeAll)
+	} else {
+		// trending up or steady
+		relativeBoost = (float64(prevPoolSizeAll) + (poolSizeChange * boostFactor)) / float64(prevPoolSizeAll)
+	}
+
+	targetBalancer := targetRatio // default
+	targetDistance := math.Abs(float64(curPoolSizeAll - targetPoolSizeAll))
+	if targetRatio > 1.0 {
+		// pool size is over target
+		if poolSizeChangeRatio > 1.0 {
+			// growing in the wrong direction, price is too low, raise targetRatio
+			if poolSizeChange < targetDistance {
+				// calculate price, make target ratio higher, raise price
+				intervalsTillImpact := targetDistance / poolSizeChange
+				targetBalancer = (float64(curPoolSizeAll) + (poolSizeChange * intervalsTillImpact)) / float64(targetPoolSizeAll)
+			}
+		}
+		if poolSizeChangeRatio < 1.0 {
+			// shrinking, correct direction
+			if poolSizeChange < targetDistance {
+				// calculate price, make target ratio lower, lower price
+				intervalsTillImpact := targetDistance / poolSizeChange
+				targetBalancer = (float64(curPoolSizeAll) - (poolSizeChange * intervalsTillImpact)) / float64(targetPoolSizeAll)
+			}
+		}
+	}
+	if targetRatio < 1.0 {
+		// pool size is under target
+		if poolSizeChangeRatio < 1.0 {
+			// shrinking in wrong direction, price is too high
+			if poolSizeChange < targetDistance {
+				// calculate price, make target ratio lower, lower price
+				intervalsTillImpact := targetDistance / poolSizeChange
+				targetBalancer = (float64(curPoolSizeAll) - (poolSizeChange * intervalsTillImpact)) / float64(targetPoolSizeAll)
+			}
+		}
+		if poolSizeChangeRatio > 1.0 {
+			// growing, correct direction
+			if poolSizeChange < targetDistance {
+				// calculate price, make target ratio higher, raise price
+				intervalsTillImpact := targetDistance / poolSizeChange
+				targetBalancer = (float64(curPoolSizeAll) + (poolSizeChange * intervalsTillImpact)) / float64(targetPoolSizeAll)
+			}
+
+		}
+	}
+
+	// Voila!
+	nextDiff := float64(curDiff) * relativeBoost * targetBalancer
+
+	// Ramp up price during initial pool population.
+	// Insures the pool gets fully populated.
+	maximumStakeDiff := int64(float64(s.tip.totalSupply) / float64(targetPoolSizeAll))
+	if float64(nextDiff) > float64(maximumStakeDiff)*targetRatio {
+		nextDiff = float64(maximumStakeDiff) * targetRatio
+	}
+
+	// Optional, keep the upper bound within a set max price.
+	// Insures the pool gets fully populated, but not needed if above code is used.
+	// Keep the chart scale more readable, but can allow the pool size to rise slightly higher.
 	if int64(nextDiff) > maximumStakeDiff {
 		if maximumStakeDiff < s.params.MinimumStakeDiff {
 			return s.params.MinimumStakeDiff
