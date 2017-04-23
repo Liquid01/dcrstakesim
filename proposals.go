@@ -505,26 +505,23 @@ func (s *simulator) calcNextStakeDiffProposal1R() int64 {
 	poolSizeChange := math.Abs(float64(curPoolSizeAll - prevPoolSizeAll))
 	poolSizeChangePerBlock := poolSizeChange / float64(intervalSize)
 
-	// Boost price movements using the pool size change.
-	// poolSizeChangePerBlock is the boostFactor, 0-20 on mainnet.
-	// Find optimal target balance.
+	// relativeBoost: Relative movement accelerator.
+	// targetBalancer: Find optimal target balance.
 	relativeBoost := 1.0 // default
-	boostFactor := poolSizeChangePerBlock
 	targetBalancer := targetRatio // default
+	boostFactor := poolSizeChangePerBlock //  up to MaxFreshStakePerBlock
 	targetDistance := math.Abs(float64(curPoolSizeAll - targetPoolSizeAll))
 	intervalsTillImpact := targetDistance / poolSizeChange
 	if curPoolSizeAll < prevPoolSizeAll {
-		// trending down
+		// trending down, lower price
 		relativeBoost = (float64(prevPoolSizeAll) - (poolSizeChange * boostFactor)) / float64(prevPoolSizeAll)
 		if poolSizeChange < targetDistance {
-			// lower price
 			targetBalancer = (float64(curPoolSizeAll) - (poolSizeChange * intervalsTillImpact)) / float64(targetPoolSizeAll)
 		}
-	} else if curPoolSizeAll < prevPoolSizeAll {
-		// trending up
+	} else if curPoolSizeAll > prevPoolSizeAll {
+		// trending up, raise price
 		relativeBoost = (float64(prevPoolSizeAll) + (poolSizeChange * boostFactor)) / float64(prevPoolSizeAll)
 		if poolSizeChange < targetDistance {
-			// raise price
 			targetBalancer = (float64(curPoolSizeAll) + (poolSizeChange * intervalsTillImpact)) / float64(targetPoolSizeAll)
 		}
 	}
