@@ -493,7 +493,6 @@ func (s *simulator) calcNextStakeDiffProposal1R() int64 {
 	curPoolSize := int64(s.tip.poolSize)
 	curPoolSizeAll := curPoolSize + immatureTickets
 	prevPoolSizeAll := prevPoolSize + prevImmatureTickets
-	poolSizeChangeRatio := float64(curPoolSizeAll) / float64(prevPoolSizeAll)
 
 	// Ratio of the current pool size to the desired target pool size.
 	ticketsPerBlock := int64(s.params.TicketsPerBlock)
@@ -507,56 +506,26 @@ func (s *simulator) calcNextStakeDiffProposal1R() int64 {
 	poolSizeChangePerBlock := poolSizeChange / float64(intervalSize)
 
 	// Boost price movements using the pool size change.
-	var relativeBoost float64
-	// poolSizeChangePerBlock is used as the multiplier, 0-20 on mainnet
+	// poolSizeChangePerBlock is the boostFactor, 0-20 on mainnet.
+	// Find optimal target balance.
+	relativeBoost := 1.0 // default
 	boostFactor := poolSizeChangePerBlock
+	targetBalancer := targetRatio // default
+	targetDistance := math.Abs(float64(curPoolSizeAll - targetPoolSizeAll))
+	intervalsTillImpact := targetDistance / poolSizeChange
 	if curPoolSizeAll < prevPoolSizeAll {
 		// trending down
 		relativeBoost = (float64(prevPoolSizeAll) - (poolSizeChange * boostFactor)) / float64(prevPoolSizeAll)
-	} else {
-		// trending up or steady
+		if poolSizeChange < targetDistance {
+			// lower price
+			targetBalancer = (float64(curPoolSizeAll) - (poolSizeChange * intervalsTillImpact)) / float64(targetPoolSizeAll)
+		}
+	} else if curPoolSizeAll < prevPoolSizeAll {
+		// trending up
 		relativeBoost = (float64(prevPoolSizeAll) + (poolSizeChange * boostFactor)) / float64(prevPoolSizeAll)
-	}
-
-	targetBalancer := targetRatio // default
-	targetDistance := math.Abs(float64(curPoolSizeAll - targetPoolSizeAll))
-	if targetRatio > 1.0 {
-		// pool size is over target
-		if poolSizeChangeRatio > 1.0 {
-			// growing in the wrong direction, price is too low, raise targetRatio
-			if poolSizeChange < targetDistance {
-				// calculate price, make target ratio higher, raise price
-				intervalsTillImpact := targetDistance / poolSizeChange
-				targetBalancer = (float64(curPoolSizeAll) + (poolSizeChange * intervalsTillImpact)) / float64(targetPoolSizeAll)
-			}
-		}
-		if poolSizeChangeRatio < 1.0 {
-			// shrinking, correct direction
-			if poolSizeChange < targetDistance {
-				// calculate price, make target ratio lower, lower price
-				intervalsTillImpact := targetDistance / poolSizeChange
-				targetBalancer = (float64(curPoolSizeAll) - (poolSizeChange * intervalsTillImpact)) / float64(targetPoolSizeAll)
-			}
-		}
-	}
-	if targetRatio < 1.0 {
-		// pool size is under target
-		if poolSizeChangeRatio < 1.0 {
-			// shrinking in wrong direction, price is too high
-			if poolSizeChange < targetDistance {
-				// calculate price, make target ratio lower, lower price
-				intervalsTillImpact := targetDistance / poolSizeChange
-				targetBalancer = (float64(curPoolSizeAll) - (poolSizeChange * intervalsTillImpact)) / float64(targetPoolSizeAll)
-			}
-		}
-		if poolSizeChangeRatio > 1.0 {
-			// growing, correct direction
-			if poolSizeChange < targetDistance {
-				// calculate price, make target ratio higher, raise price
-				intervalsTillImpact := targetDistance / poolSizeChange
-				targetBalancer = (float64(curPoolSizeAll) + (poolSizeChange * intervalsTillImpact)) / float64(targetPoolSizeAll)
-			}
-
+		if poolSizeChange < targetDistance {
+			// raise price
+			targetBalancer = (float64(curPoolSizeAll) + (poolSizeChange * intervalsTillImpact)) / float64(targetPoolSizeAll)
 		}
 	}
 
